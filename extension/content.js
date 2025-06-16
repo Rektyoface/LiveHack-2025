@@ -9,22 +9,12 @@
       url: window.location.href
     };
     
-    if (url.includes('amazon.com')) {
-      // Extract from Amazon
-      productInfo.brand = document.querySelector('#bylineInfo')?.textContent?.trim() || 
-                          document.querySelector('.a-row.a-spacing-small .a-size-base')?.textContent?.trim();
-      productInfo.name = document.querySelector('#productTitle')?.textContent?.trim();
-    } 
-    else if (url.includes('shopee.com')) {
+    if (url.includes('shopee.sg')) {
       // Extract from Shopee
       productInfo.brand = document.querySelector('.qPNIqx')?.textContent?.trim();
       productInfo.name = document.querySelector('.YPqix5')?.textContent?.trim();
     }
-    else if (url.includes('etsy.com')) {
-      // Extract from Etsy
-      productInfo.brand = document.querySelector('.shop-name-larger')?.textContent?.trim();
-      productInfo.name = document.querySelector('h1[data-buy-box-listing-title]')?.textContent?.trim();
-    }
+
     
     // Fallback method if specific selectors fail
     if (!productInfo.brand || !productInfo.name) {

@@ -25,7 +25,7 @@
   ],
   "content_scripts": [
     {
-      "matches": ["https://*.amazon.com/*", "https://shopee.sg/*", "https://*.etsy.com/*"],
+      "matches": ["https://shopee.sg/*"],
       "js": ["content.js"]
     }
   ],
