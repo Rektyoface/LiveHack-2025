@@ -9,17 +9,11 @@
       url: window.location.href
     };
     
-    // Add more website detection logic
+    // Focus only on Shopee as requested
     if (url.includes('shopee.sg') || url.includes('shopee.com')) {
       // Extract from Shopee
       productInfo.brand = document.querySelector('.qPNIqx')?.textContent?.trim();
       productInfo.name = document.querySelector('.YPqix5')?.textContent?.trim();
-    } else if (url.includes('amazon')) {
-      productInfo.brand = document.querySelector('#bylineInfo')?.textContent?.trim();
-      productInfo.name = document.querySelector('#productTitle')?.textContent?.trim();
-    } else if (url.includes('lazada')) {
-      productInfo.brand = document.querySelector('.pdp-product-brand')?.textContent?.trim();
-      productInfo.name = document.querySelector('.pdp-mod-product-name')?.textContent?.trim();
     }
     
     // Fallback method if specific selectors fail
@@ -43,6 +37,11 @@
       action: "checkSustainability", 
       productInfo: productInfo 
     }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error("Error sending message:", chrome.runtime.lastError);
+        return;
+      }
+      
       if (response && response.success) {
         displaySustainabilityBadge(response.data);
       } else {
@@ -51,11 +50,18 @@
     });
   }
   
-  // Get user preference for dark/light mode
-  async function getUserTheme() {
+  // Get user preference for badge position and dark mode
+  async function getUserPreferences() {
     return new Promise(resolve => {
-      chrome.storage.sync.get({ 'darkMode': true }, // Default to dark mode
-        (result) => resolve(result.darkMode)
+      chrome.storage.sync.get(
+        { 
+          'darkMode': true, // Default to dark mode
+          'settings': { badgePosition: 'bottom-right' } // Default position
+        }, 
+        (result) => resolve({
+          darkMode: result.darkMode,
+          badgePosition: result.settings?.badgePosition || 'bottom-right'
+        })
       );
     });
   }
@@ -68,16 +74,36 @@
       document.body.removeChild(badge);
     }
     
-    // Get user theme preference
-    const darkMode = await getUserTheme();
+    // Get user preferences
+    const preferences = await getUserPreferences();
+    const darkMode = preferences.darkMode;
     
     // Create floating badge
     badge = document.createElement('div');
     badge.id = 'ecoshop-sustainability-badge';
+    
+    // Apply position based on user preference
+    let positionStyles = '';
+    switch (preferences.badgePosition) {
+      case 'bottom-right':
+        positionStyles = 'bottom: 40px; right: 20px;'; // Moved up by 20px to avoid Shopee chat button
+        break;
+      case 'bottom-left':
+        positionStyles = 'bottom: 40px; left: 20px;';
+        break;
+      case 'top-right':
+        positionStyles = 'top: 20px; right: 20px;';
+        break;
+      case 'top-left':
+        positionStyles = 'top: 20px; left: 20px;';
+        break;
+      default:
+        positionStyles = 'bottom: 40px; right: 20px;';
+    }
+    
     badge.style.cssText = `
       position: fixed;
-      bottom: 40px; /* Moved up by 20px to avoid Shopee chat button */
-      right: 20px;
+      ${positionStyles}
       background-color: ${darkMode ? '#222' : 'white'};
       color: ${darkMode ? '#fff' : '#333'};
       border: 2px solid #${getColorForScore(sustainabilityData.score)};
@@ -96,8 +122,11 @@
         ${sustainabilityData.score}/100
       </div>
       <p style="margin: 10px 0 0 0;">
-        Click to see details
+        Click for details
       </p>
+      <div style="margin-top: 8px; font-size: 12px; color: ${darkMode ? '#ccc' : '#666'};">
+        Or click the extension icon in the toolbar
+      </div>
     `;
     
     document.body.appendChild(badge);
@@ -115,36 +144,63 @@
     
     // Make badge open extension popup when clicked
     badge.addEventListener('click', () => {
-      chrome.runtime.sendMessage({ action: "openPopup" });
+      // Send message to open popup and highlight the extension icon
+      chrome.runtime.sendMessage({ action: "openPopup" }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn("Note: You need to click the extension icon in the toolbar to see details");
+        }
+      });
+      
+      // Also show a toast notification explaining how to see details
+      showToast("Please click the EcoShop icon in your browser toolbar to see sustainability details");
     });
+  }
+  
+  // Show a toast notification
+  function showToast(message, duration = 3500) {
+    // Check if a toast already exists
+    let toast = document.getElementById('ecoshop-toast');
+    if (toast) {
+      document.body.removeChild(toast);
+    }
     
-    // Add theme toggle button
-    const themeToggle = document.createElement('div');
-    themeToggle.style.cssText = `
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      background-color: ${darkMode ? '#fff' : '#222'};
-      cursor: pointer;
-      border: 1px solid #ccc;
+    // Create the toast
+    toast = document.createElement('div');
+    toast.id = 'ecoshop-toast';
+    toast.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      z-index: 10001;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
     `;
     
-    themeToggle.addEventListener('click', async (e) => {
-      e.stopPropagation(); // Prevent triggering badge click
-      const currentTheme = await getUserTheme();
-      const newTheme = !currentTheme;
-      chrome.storage.sync.set({ 'darkMode': newTheme });
-      badge.style.backgroundColor = newTheme ? '#222' : 'white';
-      badge.style.color = newTheme ? '#fff' : '#333';
-      const headerText = badge.querySelector('h3');
-      if (headerText) headerText.style.color = newTheme ? '#fff' : '#333';
-      themeToggle.style.backgroundColor = newTheme ? '#fff' : '#222';
-    });
+    toast.textContent = message;
+    document.body.appendChild(toast);
     
-    badge.appendChild(themeToggle);
+    // Fade in
+    setTimeout(() => {
+      toast.style.opacity = '1';
+    }, 10);
+    
+    // Fade out and remove
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) {
+          document.body.removeChild(toast);
+        }
+      }, 300);
+    }, duration);
   }
   
   // Get color based on sustainability score
@@ -153,6 +209,15 @@
     if (score >= 40) return 'FFC107'; // Yellow/Amber
     return 'F44336'; // Red
   }
+  
+  // Handle messages from background script or popup
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === "getProductInfo") {
+      const productInfo = extractProductInfo();
+      sendResponse({ productInfo });
+    }
+    return true;
+  });
   
   // Wait for the page to fully load
   window.addEventListener('load', () => {

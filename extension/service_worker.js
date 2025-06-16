@@ -16,11 +16,66 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleSustainabilityCheck(message.productInfo, sendResponse);
     return true; // Required for async response
   } else if (message.action === "openPopup") {
-    // Open the popup when badge is clicked
-    chrome.action.openPopup();
+    // We can't programmatically open the popup, but we can make sure the badge is visible
+    // and let the user know they need to click the extension icon
+    if (sender.tab && sender.tab.id) {
+      chrome.action.setPopup({ tabId: sender.tab.id, popup: "popup/popup.html" });
+      // Make the badge more noticeable by briefly changing the text
+      chrome.action.setBadgeText({ text: "OPEN", tabId: sender.tab.id });
+      setTimeout(() => {
+        // Restore the original score badge after a brief moment
+        const cachedData = getCachedDataForTab(sender.tab.id);
+        if (cachedData && cachedData.score) {
+          updateBadgeForTab(sender.tab.id, cachedData.score);
+        }
+      }, 1500);
+    }
     return false;
+  } else if (message.action === "checkCurrentPage") {
+    // Handling direct requests when content script isn't available
+    const productInfo = {
+      brand: extractBrandFromTitle(message.title),
+      name: message.title,
+      url: message.url
+    };
+    handleSustainabilityCheck(productInfo, sendResponse);
+    return true;
   }
 });
+
+// Store cached data by tab ID for badge restoration
+let tabDataCache = {};
+
+function getCachedDataForTab(tabId) {
+  return tabDataCache[tabId];
+}
+
+// Extract brand name from page title (fallback method)
+function extractBrandFromTitle(title) {
+  if (!title) return null;
+  
+  // This is a very basic extraction - could be improved with NLP
+  const brandPatterns = [
+    /by\s+([A-Za-z0-9\s]+)/i,        // "Product by Brand"
+    /([A-Za-z0-9\s]+)\s+official/i,  // "Brand Official Store"
+    /([A-Za-z0-9\s]+)\s+store/i,     // "Brand Store"
+  ];
+  
+  for (const pattern of brandPatterns) {
+    const match = title.match(pattern);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+  
+  // Simple fallback: take the first word if it's capitalized
+  const words = title.split(' ');
+  if (words[0] && words[0][0] === words[0][0].toUpperCase()) {
+    return words[0];
+  }
+  
+  return null;
+}
 
 // Handle sustainability data lookup
 async function handleSustainabilityCheck(productInfo, sendResponse) {
@@ -29,9 +84,17 @@ async function handleSustainabilityCheck(productInfo, sendResponse) {
     const cacheKey = productInfo.brand?.toLowerCase();
     if (cacheKey && sustainabilityCache[cacheKey]) {
       console.log("Cache hit for brand:", cacheKey);
+      const data = sustainabilityCache[cacheKey];
+      
+      // Set the badge for this tab
+      if (sender.tab && sender.tab.id) {
+        updateBadgeForTab(sender.tab.id, data.score);
+        tabDataCache[sender.tab.id] = data;
+      }
+      
       sendResponse({
         success: true,
-        data: sustainabilityCache[cacheKey]
+        data: data
       });
       return;
     }
@@ -62,8 +125,9 @@ async function handleSustainabilityCheck(productInfo, sendResponse) {
     }
     
     // Set the badge for this tab
-    if (sender.tab && sender.tab.id) {
+    if (sender && sender.tab && sender.tab.id) {
       updateBadgeForTab(sender.tab.id, sustainabilityData.score);
+      tabDataCache[sender.tab.id] = sustainabilityData;
     }
     
     sendResponse({
@@ -94,7 +158,8 @@ async function getSustainabilityData() {
     }
     
     // If not in storage, get from bundled data file
-    const response = await fetch(chrome.runtime.getURL('../data/esg_scores.json'));
+    // Fix the path to the data file - use direct path without ".."
+    const response = await fetch(chrome.runtime.getURL('data/esg_scores.json'));
     const data = await response.json();
     
     // Store for future use
