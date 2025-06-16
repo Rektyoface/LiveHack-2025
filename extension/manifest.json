@@ -4,16 +4,16 @@
   "version": "1.0",
   "description": "Get real-time information about the environmental sustainability of brands and products as you shop online",
   "icons": {
-    "16": "icons/icon16.svg",
-    "48": "icons/icon48.svg",
-    "128": "icons/icon128.svg"
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
-      "16": "icons/icon16.svg",
-      "48": "icons/icon48.svg",
-      "128": "icons/icon128.svg"
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     }
   },
   "permissions": [
@@ -25,7 +25,7 @@
   ],
   "content_scripts": [
     {
-      "matches": ["https://*.amazon.com/*", "https://*.shopee.sg/*", "https://*.etsy.com/*"],
+      "matches": ["https://*.amazon.com/*", "https://shopee.sg/*", "https://*.etsy.com/*"],
       "js": ["content.js"]
     }
   ],
