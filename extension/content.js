@@ -37,6 +37,11 @@
       action: "checkSustainability", 
       productInfo: productInfo 
     }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error("Error sending message:", chrome.runtime.lastError);
+        return;
+      }
+      
       if (response && response.success) {
         displaySustainabilityBadge(response.data);
       } else {
@@ -117,8 +122,11 @@
         ${sustainabilityData.score}/100
       </div>
       <p style="margin: 10px 0 0 0;">
-        Click to see details
+        Click for details
       </p>
+      <div style="margin-top: 8px; font-size: 12px; color: ${darkMode ? '#ccc' : '#666'};">
+        Or click the extension icon in the toolbar
+      </div>
     `;
     
     document.body.appendChild(badge);
@@ -136,8 +144,63 @@
     
     // Make badge open extension popup when clicked
     badge.addEventListener('click', () => {
-      chrome.runtime.sendMessage({ action: "openPopup" });
+      // Send message to open popup and highlight the extension icon
+      chrome.runtime.sendMessage({ action: "openPopup" }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn("Note: You need to click the extension icon in the toolbar to see details");
+        }
+      });
+      
+      // Also show a toast notification explaining how to see details
+      showToast("Please click the EcoShop icon in your browser toolbar to see sustainability details");
     });
+  }
+  
+  // Show a toast notification
+  function showToast(message, duration = 3500) {
+    // Check if a toast already exists
+    let toast = document.getElementById('ecoshop-toast');
+    if (toast) {
+      document.body.removeChild(toast);
+    }
+    
+    // Create the toast
+    toast = document.createElement('div');
+    toast.id = 'ecoshop-toast';
+    toast.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 4px;
+      z-index: 10001;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    `;
+    
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    // Fade in
+    setTimeout(() => {
+      toast.style.opacity = '1';
+    }, 10);
+    
+    // Fade out and remove
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => {
+        if (toast.parentNode) {
+          document.body.removeChild(toast);
+        }
+      }, 300);
+    }, duration);
   }
   
   // Get color based on sustainability score
@@ -146,6 +209,15 @@
     if (score >= 40) return 'FFC107'; // Yellow/Amber
     return 'F44336'; // Red
   }
+  
+  // Handle messages from background script or popup
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === "getProductInfo") {
+      const productInfo = extractProductInfo();
+      sendResponse({ productInfo });
+    }
+    return true;
+  });
   
   // Wait for the page to fully load
   window.addEventListener('load', () => {
