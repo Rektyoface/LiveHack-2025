@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EcoShop Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>EcoShop Settings</h1>
+      <p class="description">Customize your sustainability shopping experience</p>
+    </header>
+
+    <div class="settings-section">
+      <h2>Sustainability Metrics</h2>
+      <p class="section-description">Adjust the importance of each environmental factor</p>
+      
+      <div class="setting-item">
+        <label for="carbon-weight">Carbon Footprint</label>
+        <div class="weight-container">
+          <input type="range" id="carbon-weight" name="carbon-weight" min="1" max="5" value="3">
+          <span class="weight-value" id="carbon-weight-value">3</span>
+        </div>
+      </div>
+      
+      <div class="setting-item">
+        <label for="water-weight">Water Usage</label>
+        <div class="weight-container">
+          <input type="range" id="water-weight" name="water-weight" min="1" max="5" value="3">
+          <span class="weight-value" id="water-weight-value">3</span>
+        </div>
+      </div>
+      
+      <div class="setting-item">
+        <label for="waste-weight">Waste Generation</label>
+        <div class="weight-container">
+          <input type="range" id="waste-weight" name="waste-weight" min="1" max="5" value="3">
+          <span class="weight-value" id="waste-weight-value">3</span>
+        </div>
+      </div>
+      
+      <div class="setting-item">
+        <label for="labor-weight">Labor Practices</label>
+        <div class="weight-container">
+          <input type="range" id="labor-weight" name="labor-weight" min="1" max="5" value="3">
+          <span class="weight-value" id="labor-weight-value">3</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="settings-section">
+      <h2>Display Settings</h2>
+      
+      <div class="setting-item checkbox-item">
+        <label>
+          <input type="checkbox" id="show-badge" name="show-badge" checked>
+          Show sustainability badge on product pages
+        </label>
+      </div>
+      
+      <div class="setting-item checkbox-item">
+        <label>
+          <input type="checkbox" id="show-alternatives" name="show-alternatives" checked>
+          Show alternative product recommendations
+        </label>
+      </div>
+      
+      <div class="setting-item">
+        <label for="badge-position">Badge Position</label>
+        <select id="badge-position" name="badge-position">
+          <option value="bottom-right">Bottom Right</option>
+          <option value="bottom-left">Bottom Left</option>
+          <option value="top-right">Top Right</option>
+          <option value="top-left">Top Left</option>
+        </select>
+      </div>
+      
+      <div class="setting-item checkbox-item">
+        <label>
+          <input type="checkbox" id="dark-mode" name="dark-mode">
+          Dark Mode
+        </label>
+      </div>
+    </div>
+    
+    <div class="settings-section">
+      <h2>Data Sources</h2>
+      
+      <div class="setting-item">
+        <label for="api-endpoint">Custom API Endpoint (Optional)</label>
+        <input type="text" id="api-endpoint" name="api-endpoint" placeholder="https://your-api-endpoint.com/sustainability">
+      </div>
+      
+      <div class="setting-item checkbox-item">
+        <label>
+          <input type="checkbox" id="use-local-data" name="use-local-data" checked>
+          Use local data when offline
+        </label>
+      </div>
+      
+      <div class="setting-item checkbox-item">
+        <label>
+          <input type="checkbox" id="data-contribution" name="data-contribution">
+          Contribute anonymous usage data to improve recommendations
+        </label>
+      </div>
+    </div>
+    
+    <div class="button-row">
+      <button id="restore-defaults" class="secondary-button">Restore Defaults</button>
+      <button id="save-settings" class="primary-button">Save Settings</button>
+    </div>
+    
+    <div id="status-message" class="status-message"></div>
+  </div>
+  
+  <script src="options.js"></script>
+</body>
+</html>
