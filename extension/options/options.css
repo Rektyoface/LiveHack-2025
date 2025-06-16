@@ -9,6 +9,7 @@
   --color-text-primary: #212121;
   --color-text-secondary: #757575;
   --color-background: #FFFFFF;
+  --color-page-background: #F5F5F5;
   --color-border: #E0E0E0;
   --border-radius: 8px;
   --spacing-xs: 4px;
@@ -16,6 +17,27 @@
   --spacing-md: 16px;
   --spacing-lg: 24px;
   --spacing-xl: 32px;
+  
+  /* Dark theme colors */
+  --color-dark-primary: #388E3C;
+  --color-dark-secondary: #4CAF50;
+  --color-dark-light: #1B5E20;
+  --color-dark-background: #222222;
+  --color-dark-page-background: #181818;
+  --color-dark-border: #444444;
+  --color-dark-text-primary: #FFFFFF;
+  --color-dark-text-secondary: #BBBBBB;
+}
+
+[data-theme="dark"] {
+  --color-primary: var(--color-dark-primary);
+  --color-secondary: var(--color-dark-secondary);
+  --color-light: var(--color-dark-light);
+  --color-text-primary: var(--color-dark-text-primary);
+  --color-text-secondary: var(--color-dark-text-secondary);
+  --color-background: var(--color-dark-background);
+  --color-page-background: var(--color-dark-page-background);
+  --color-border: var(--color-dark-border);
 }
 
 /* Base styles */
@@ -30,7 +52,8 @@ body {
   font-size: 14px;
   line-height: 1.6;
   color: var(--color-text-primary);
-  background-color: #F5F5F5;
+  background-color: var(--color-page-background);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .container {
@@ -39,7 +62,8 @@ body {
   padding: var(--spacing-xl);
   background-color: var(--color-background);
   border-radius: var(--border-radius);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.3s ease;
 }
 
 /* Header styles */
@@ -48,6 +72,7 @@ header {
   margin-bottom: var(--spacing-xl);
   padding-bottom: var(--spacing-lg);
   border-bottom: 1px solid var(--color-border);
+  position: relative;
 }
 
 header h1 {
@@ -58,6 +83,60 @@ header h1 {
 
 header .description {
   color: var(--color-text-secondary);
+}
+
+/* Theme toggle switch */
+.theme-toggle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+}
+
+.theme-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+}
+
+.theme-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.theme-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  border-radius: 20px;
+  transition: .4s;
+}
+
+.theme-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  border-radius: 50%;
+  transition: .4s;
+}
+
+input:checked + .theme-toggle-slider {
+  background-color: var(--color-primary);
+}
+
+input:checked + .theme-toggle-slider:before {
+  transform: translateX(20px);
 }
 
 /* Settings section styles */
@@ -98,11 +177,12 @@ header .description {
 .weight-container input[type="range"] {
   flex: 1;
   margin-right: var(--spacing-md);
+  accent-color: var(--color-primary);
 }
 
 .weight-value {
-  background-color: var(--color-light);
-  color: var(--color-primary);
+  background-color: var(--color-primary);
+  color: white;
   width: 30px;
   height: 30px;
   display: flex;
@@ -110,6 +190,7 @@ header .description {
   align-items: center;
   border-radius: 50%;
   font-weight: bold;
+  transition: background-color 0.3s ease;
 }
 
 .checkbox-item {
@@ -121,12 +202,15 @@ header .description {
 .checkbox-item label {
   margin-bottom: 0;
   margin-left: var(--spacing-sm);
+  display: flex;
+  align-items: center;
 }
 
 .checkbox-item input[type="checkbox"] {
   accent-color: var(--color-primary);
   width: 18px;
   height: 18px;
+  margin-right: var(--spacing-sm);
 }
 
 select, input[type="text"] {
@@ -134,6 +218,8 @@ select, input[type="text"] {
   border: 1px solid var(--color-border);
   border-radius: 4px;
   font-size: 14px;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
 }
 
 select:focus, input[type="text"]:focus {
@@ -155,7 +241,15 @@ button {
   border-radius: 4px;
   cursor: pointer;
   font-weight: 500;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
+}
+
+button:hover {
+  transform: translateY(-2px);
+}
+
+button:active {
+  transform: translateY(0);
 }
 
 .primary-button {
@@ -174,7 +268,7 @@ button {
 }
 
 .secondary-button:hover {
-  background-color: #f0f0f0;
+  background-color: rgba(128, 128, 128, 0.1);
 }
 
 /* Status message */

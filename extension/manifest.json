@@ -18,14 +18,21 @@
   },
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
     "https://*/*"
   ],
   "content_scripts": [
     {
-      "matches": ["https://shopee.sg/*"],
+      "matches": [
+        "https://*.shopee.sg/*",
+        "https://*.shopee.com/*",
+        "https://*.amazon.com/*", 
+        "https://*.lazada.com/*",
+        "https://*.etsy.com/*"
+      ],
       "js": ["content.js"]
     }
   ],

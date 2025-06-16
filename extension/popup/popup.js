@@ -20,6 +20,38 @@ document.addEventListener('DOMContentLoaded', function() {
   const alternativesListElement = document.getElementById('alternatives-list');
   const optionsButton = document.getElementById('options-button');
   const learnMoreButton = document.getElementById('learn-more');
+  const themeToggleInput = document.getElementById('theme-toggle-input');
+  const websiteBadge = document.getElementById('website-badge');
+
+  // Initialize dark mode from storage
+  initTheme();
+
+  // Theme toggle functionality
+  themeToggleInput.addEventListener('change', function() {
+    const isDarkMode = this.checked;
+    setTheme(isDarkMode);
+    // Save preference to storage
+    chrome.storage.sync.set({ 'darkMode': isDarkMode });
+  });
+
+  // Initialize theme from saved preference
+  async function initTheme() {
+    try {
+      const result = await chrome.storage.sync.get({ 'darkMode': true });
+      setTheme(result.darkMode);
+      themeToggleInput.checked = result.darkMode;
+    } catch (error) {
+      console.error("Error loading theme preference:", error);
+      // Default to dark mode
+      setTheme(true);
+      themeToggleInput.checked = true;
+    }
+  }
+
+  // Set theme on page
+  function setTheme(isDarkMode) {
+    document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+  }
 
   // Get current tab information
   chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
@@ -31,11 +63,17 @@ document.addEventListener('DOMContentLoaded', function() {
     // Get the current tab
     const currentTab = tabs[0];
     
+    // Display the current website
+    const url = new URL(currentTab.url);
+    websiteBadge.textContent = url.hostname;
+    
     // Check if the URL is a supported e-commerce site
     const supportedSites = [
       'amazon.com',
+      'shopee.sg',
       'shopee.com',
-      'etsy.com'
+      'etsy.com',
+      'lazada.com'
     ];
     
     const isProductPage = supportedSites.some(site => currentTab.url.includes(site));
@@ -143,7 +181,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="alternative-score" style="background-color: ${getScoreColor(alt.score)}">${alt.score}</div>
         `;
         altElement.addEventListener('click', () => {
-          // Could open a link to this alternative product
+          // Open a link to this alternative product
           window.open(`https://www.google.com/search?q=${encodeURIComponent(alt.brand)}+sustainable+products`, '_blank');
         });
         alternativesListElement.appendChild(altElement);

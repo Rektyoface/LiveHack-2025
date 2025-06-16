@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,6 +9,12 @@
 <body>
   <div class="container">
     <header>
+      <div class="theme-toggle">
+        <label class="theme-toggle-switch">
+          <input type="checkbox" id="theme-toggle-input" checked>
+          <span class="theme-toggle-slider"></span>
+        </label>
+      </div>
       <h1>EcoShop Settings</h1>
       <p class="description">Customize your sustainability shopping experience</p>
     </header>
@@ -79,7 +85,7 @@
       
       <div class="setting-item checkbox-item">
         <label>
-          <input type="checkbox" id="dark-mode" name="dark-mode">
+          <input type="checkbox" id="dark-mode" name="dark-mode" checked>
           Dark Mode
         </label>
       </div>

@@ -15,6 +15,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "checkSustainability") {
     handleSustainabilityCheck(message.productInfo, sendResponse);
     return true; // Required for async response
+  } else if (message.action === "openPopup") {
+    // Open the popup when badge is clicked
+    chrome.action.openPopup();
+    return false;
   }
 });
 
@@ -55,6 +59,11 @@ async function handleSustainabilityCheck(productInfo, sendResponse) {
     // Cache the result
     if (cacheKey) {
       sustainabilityCache[cacheKey] = sustainabilityData;
+    }
+    
+    // Set the badge for this tab
+    if (sender.tab && sender.tab.id) {
+      updateBadgeForTab(sender.tab.id, sustainabilityData.score);
     }
     
     sendResponse({
