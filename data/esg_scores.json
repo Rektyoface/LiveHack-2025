@@ -1,212 +1,42 @@
 [
   {
-    "brand": "Patagonia",
-    "score": 92,
-    "co2e": 1.8,
-    "waterUsage": "low",
-    "wasteGenerated": "low",
-    "laborPractices": "good",
-    "certainty": "high",
-    "message": "Patagonia is a leader in sustainable practices with transparent supply chains and strong environmental commitments.",
-    "alternatives": [
-      { "brand": "The North Face", "score": 78 },
-      { "brand": "REI Co-op", "score": 85 }
-    ]
-  },
-  {
-    "brand": "Apple",
-    "score": 76,
-    "co2e": 2.9,
-    "waterUsage": "medium",
-    "wasteGenerated": "medium",
-    "laborPractices": "fair",
-    "certainty": "high",
-    "message": "Apple has made significant progress in renewable energy and recycling programs but faces challenges with material sourcing.",
-    "alternatives": [
-      { "brand": "Fairphone", "score": 89 },
-      { "brand": "Framework", "score": 85 }
-    ]
-  },
-  {
-    "brand": "H&M",
-    "score": 43,
+    "brand": "Nike",
+    "score": 68,
     "co2e": 5.4,
     "waterUsage": "high",
-    "wasteGenerated": "high",
-    "laborPractices": "fair",
-    "certainty": "medium",
-    "message": "H&M has implemented conscious collections but still faces significant sustainability challenges in fast fashion.",
-    "alternatives": [
-      { "brand": "Everlane", "score": 71 },
-      { "brand": "Eileen Fisher", "score": 78 }
-    ]
-  },
-  {
-    "brand": "Nike",
-    "score": 65,
-    "co2e": 3.7,
-    "waterUsage": "medium",
     "wasteGenerated": "medium",
     "laborPractices": "fair",
     "certainty": "high",
-    "message": "Nike has improved labor practices and is working toward renewable energy goals, but material sustainability remains a challenge.",
-    "alternatives": [
-      { "brand": "Allbirds", "score": 82 },
-      { "brand": "Veja", "score": 87 }
-    ]
-  },
-  {
-    "brand": "Coca-Cola",
-    "score": 38,
-    "co2e": 4.2,
-    "waterUsage": "very high",
-    "wasteGenerated": "high",
-    "laborPractices": "fair",
-    "certainty": "high",
-    "message": "Coca-Cola faces significant challenges with plastic pollution and water usage despite recycling initiatives.",
-    "alternatives": [
-      { "brand": "Sodastream", "score": 71 },
-      { "brand": "Liquid Death", "score": 65 }
-    ]
-  },
-  {
-    "brand": "IKEA",
-    "score": 68,
-    "co2e": 3.1,
-    "waterUsage": "medium",
-    "wasteGenerated": "medium",
-    "laborPractices": "good",
-    "certainty": "high",
-    "message": "IKEA has strong renewable energy commitments and sustainable sourcing but faces challenges with product lifespan.",
-    "alternatives": [
-      { "brand": "West Elm", "score": 61 },
-      { "brand": "Ecobirdy", "score": 87 }
-    ]
-  },
-  {
-    "brand": "Amazon",
-    "score": 32,
-    "co2e": 6.2,
-    "waterUsage": "medium",
-    "wasteGenerated": "high",
-    "laborPractices": "poor",
-    "certainty": "medium",
-    "message": "Amazon faces significant sustainability challenges with packaging waste and transportation emissions.",
-    "alternatives": [
-      { "brand": "Etsy", "score": 68 },
-      { "brand": "Package Free Shop", "score": 91 }
-    ]
-  },
-  {
-    "brand": "Nestle",
-    "score": 27,
-    "co2e": 5.8,
-    "waterUsage": "very high",
-    "wasteGenerated": "high",
-    "laborPractices": "poor",
-    "certainty": "high",
-    "message": "Nestle faces significant challenges with water rights, deforestation, and plastic packaging.",
-    "alternatives": [
-      { "brand": "Seventh Generation", "score": 82 },
-      { "brand": "Bamboo Batu", "score": 89 }
-    ]
-  },
-  {
-    "brand": "Tesla",
-    "score": 74,
-    "co2e": 2.3,
-    "waterUsage": "medium",
-    "wasteGenerated": "medium",
-    "laborPractices": "fair",
-    "certainty": "medium",
-    "message": "Tesla is advancing sustainable transportation but faces challenges with battery material sourcing.",
-    "alternatives": [
-      { "brand": "Rivian", "score": 76 },
-      { "brand": "BYD", "score": 72 }
-    ]
-  },
-  {
-    "brand": "Unilever",
-    "score": 61,
-    "co2e": 3.3,
-    "waterUsage": "medium",
-    "wasteGenerated": "medium",
-    "laborPractices": "good",
-    "certainty": "high",
-    "message": "Unilever has strong sustainability commitments but still faces challenges with plastic packaging.",
-    "alternatives": [
-      { "brand": "Dr. Bronner's", "score": 88 },
-      { "brand": "Method", "score": 79 }
-    ]
-  },
-  {
-    "brand": "Zara",
-    "score": 39,
-    "co2e": 5.1,
-    "waterUsage": "high",
-    "wasteGenerated": "high",
-    "laborPractices": "fair",
-    "certainty": "medium",
-    "message": "Zara faces significant sustainability challenges common to fast fashion despite some improvement initiatives.",
-    "alternatives": [
-      { "brand": "Reformation", "score": 75 },
-      { "brand": "Thought Clothing", "score": 83 }
-    ]
-  },
-  {
-    "brand": "Microsoft",
-    "score": 81,
-    "co2e": 2.1,
-    "waterUsage": "low",
-    "wasteGenerated": "low",
-    "laborPractices": "good",
-    "certainty": "high",
-    "message": "Microsoft has strong carbon negative commitments and circular economy initiatives.",
-    "alternatives": [
-      { "brand": "Framework", "score": 85 },
-      { "brand": "Fairphone", "score": 89 }
-    ]
+    "message": "Nike has made significant sustainability improvements but still has areas to work on."
   },
   {
     "brand": "Samsung",
-    "score": 58,
-    "co2e": 3.4,
+    "score": 72,
+    "co2e": 4.2,
     "waterUsage": "medium",
     "wasteGenerated": "medium",
     "laborPractices": "fair",
-    "certainty": "medium",
-    "message": "Samsung has improved energy efficiency but faces challenges with product repairability and e-waste.",
-    "alternatives": [
-      { "brand": "Fairphone", "score": 89 },
-      { "brand": "Framework", "score": 85 }
-    ]
-  },
-  {
-    "brand": "Starbucks",
-    "score": 52,
-    "co2e": 3.7,
-    "waterUsage": "high",
-    "wasteGenerated": "high",
-    "laborPractices": "good",
     "certainty": "high",
-    "message": "Starbucks has strong fair trade sourcing but faces challenges with single-use packaging waste.",
-    "alternatives": [
-      { "brand": "Peet's Coffee", "score": 67 },
-      { "brand": "Equal Exchange", "score": 86 }
-    ]
+    "message": "Samsung is improving sustainability but has more work to do on e-waste."
   },
   {
-    "brand": "Levi's",
-    "score": 63,
-    "co2e": 3.2,
+    "brand": "Apple",
+    "score": 78,
+    "co2e": 3.8,
     "waterUsage": "medium",
     "wasteGenerated": "medium",
+    "laborPractices": "fair",
+    "certainty": "high",
+    "message": "Apple has made strong progress in renewable energy and materials."
+  },
+  {
+    "brand": "Patagonia",
+    "score": 89,
+    "co2e": 2.7,
+    "waterUsage": "low",
+    "wasteGenerated": "low",
     "laborPractices": "good",
-    "certainty": "medium",
-    "message": "Levi's has improved water conservation and ethical sourcing but faces challenges with product durability.",
-    "alternatives": [
-      { "brand": "Nudie Jeans", "score": 82 },
-      { "brand": "MUD Jeans", "score": 87 }
-    ]
+    "certainty": "high",
+    "message": "Patagonia is an industry leader in sustainable and ethical practices."
   }
 ]

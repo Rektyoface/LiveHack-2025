@@ -1,28 +1,26 @@
 import os
 import json
 from groq import Groq
+from dotenv import load_dotenv
 
-# --- MODIFICATION START ---
-# Import the API key from your config.py file
-try:
-    from config import GROQ_API_KEY
-except ImportError:
-    print("Error: Could not import GROQ_API_KEY from config.py.")
-    print("Please make sure a 'config.py' file exists in the same directory and contains your API key.")
-    exit()
+# Load environment variables
+load_dotenv()
 
-if not GROQ_API_KEY:
-    print("Error: GROQ_API_KEY is empty in config.py.")
-    print("Please add your Groq API key to the config.py file.")
-    exit()
+# Get Groq API key from environment
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
 
-# Initialize the Groq client by passing the API key directly
-try:
-    client = Groq(api_key=GROQ_API_KEY)
-except Exception as e:
-    print(f"Error initializing Groq client: {e}")
-    exit()
-# --- MODIFICATION END ---
+if not GROQ_API_KEY or GROQ_API_KEY == 'your_groq_api_key_here':
+    print("Warning: GROQ_API_KEY not set or using placeholder. LLM functionality will be disabled.")
+    print("Please set GROQ_API_KEY in your .env file to enable LLM analysis.")
+    client = None
+else:
+    # Initialize the Groq client
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        print("Groq client initialized successfully")
+    except Exception as e:
+        print(f"Error initializing Groq client: {e}")
+        client = None
 
 
 def get_sustainability_factors_from_text(scraped_data: dict) -> dict:
@@ -37,6 +35,13 @@ def get_sustainability_factors_from_text(scraped_data: dict) -> dict:
         A dictionary containing the structured sustainability analysis,
         or an error dictionary if the analysis fails.
     """
+    
+    # Check if LLM client is available
+    if not client:
+        return {
+            "error": "LLM client not initialized. Please check GROQ_API_KEY configuration.",
+            "details": "Groq API key not set or invalid"
+        }
     
     # Combine the scraped data into a single block for the LLM
     product_text = f"""

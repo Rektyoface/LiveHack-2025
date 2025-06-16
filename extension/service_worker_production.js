@@ -1,5 +1,5 @@
-// Service worker for EcoShop sustainability extension - Production Version with SSE
-// This extension requires database connectivity and uses Server-Sent Events for real-time updates
+// Service worker for EcoShop sustainability extension - Production Version
+// This extension requires database connectivity - no offline fallbacks
 
 // In-memory cache for faster lookups
 let sustainabilityCache = {};
@@ -9,12 +9,6 @@ let scrapedProductsHistory = [];
 
 // Store cached data by tab ID for badge restoration
 let tabDataCache = {};
-
-// Store active SSE connections by task ID
-let activeConnections = new Map();
-
-// API Base URL
-const API_BASE_URL = 'http://localhost:5000/api';
 
 // Main message listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -103,125 +97,58 @@ function sendToastToTab(tabId, message) {
 }
 
 // Poll for product updates after it's been inserted for processing
-// Create a new analysis task
-async function createAnalysisTask(productInfo) {
-  try {
-    const response = await fetch(`${API_BASE_URL}/tasks`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        task_type: 'sustainability_analysis',
-        product_url: productInfo.url,
-        product_name: productInfo.name,
-        product_brand: productInfo.brand,
-        specifications: productInfo.specifications || {}
-      })
-    });
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error creating analysis task:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-// Monitor task progress using Server-Sent Events
-function monitorTaskWithSSE(taskId, productInfo, sender, sendResponse) {
-  console.log(`Starting SSE monitoring for task ${taskId}`);
-  
-  // Don't create duplicate connections
-  if (activeConnections.has(taskId)) {
-    console.log(`SSE connection already exists for task ${taskId}`);
-    return;
-  }
-
-  const eventSource = new EventSource(`${API_BASE_URL}/watch/${taskId}`);
-  activeConnections.set(taskId, eventSource);
-
-  eventSource.onmessage = function(event) {
+async function pollForUpdates(productId, sender, maxAttempts = 30) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const update = JSON.parse(event.data);
-      console.log(`SSE update for task ${taskId}:`, update);
-
-      if (update.error) {
-        console.error(`SSE error for task ${taskId}:`, update.error);
-        if (sender && sender.tab && sender.tab.id) {
-          sendToastToTab(sender.tab.id, `EcoShop: Error during analysis: ${update.error}`);
-        }
-        eventSource.close();
-        activeConnections.delete(taskId);
-        return;
-      }
-
-      // Handle different update types
-      if (update.status === 'completed' && update.data) {
-        console.log(`Task ${taskId} completed successfully`);
-        
-        // Cache the result
-        const cacheKey = productInfo.brand?.toLowerCase();
-        if (cacheKey) {
-          sustainabilityCache[cacheKey] = update.data;
-        }
-
-        // Update UI
-        if (sender && sender.tab && sender.tab.id) {
-          updateBadgeForTab(sender.tab.id, update.data.score);
-          tabDataCache[sender.tab.id] = update.data;
-          sendToastToTab(sender.tab.id, `EcoShop: Analysis complete! Score: ${update.data.score}`);
-        }
-
-        // Send final result (this might not reach the original caller, but useful for future requests)
-        sendResponse({
-          success: true,
-          data: update.data
+      const settingsData = await new Promise(resolve => {
+        chrome.storage.sync.get(['settings', 'apiEndpoint'], (result) => {
+          const settings = result.settings || {};
+          const directApiEndpoint = result.apiEndpoint;
+          resolve({ 
+            settings: settings,
+            directApiEndpoint: directApiEndpoint
+          });
         });
-
-        eventSource.close();
-        activeConnections.delete(taskId);
-        
-      } else if (update.status === 'processing') {
-        console.log(`Task ${taskId} is processing...`);
-        if (sender && sender.tab && sender.tab.id) {
-          sendToastToTab(sender.tab.id, `EcoShop: ${update.message || 'Processing...'}`);
-        }
-        
-      } else if (update.status === 'failed') {
-        console.error(`Task ${taskId} failed:`, update.error);
-        if (sender && sender.tab && sender.tab.id) {
-          sendToastToTab(sender.tab.id, `EcoShop: Analysis failed: ${update.error || 'Unknown error'}`);
-        }
-        eventSource.close();
-        activeConnections.delete(taskId);
+      });
+      
+      let apiBaseUrl = settingsData.directApiEndpoint || 
+                  (settingsData.settings && settingsData.settings.apiEndpoint) || 
+                  "http://localhost:5000";
+      
+      if (apiBaseUrl.endsWith('/api/score')) {
+        apiBaseUrl = apiBaseUrl.replace('/api/score', '');
       }
       
-    } catch (error) {
-      console.error(`Error parsing SSE message for task ${taskId}:`, error);
-    }
-  };
-
-  eventSource.onerror = function(error) {
-    console.error(`SSE connection error for task ${taskId}:`, error);
-    if (sender && sender.tab && sender.tab.id) {
-      sendToastToTab(sender.tab.id, `EcoShop: Connection error during analysis`);
-    }
-    eventSource.close();
-    activeConnections.delete(taskId);
-  };
-
-  // Set a timeout to close connection after 5 minutes
-  setTimeout(() => {
-    if (activeConnections.has(taskId)) {
-      console.log(`Closing SSE connection for task ${taskId} due to timeout`);
-      eventSource.close();
-      activeConnections.delete(taskId);
-      if (sender && sender.tab && sender.tab.id) {
-        sendToastToTab(sender.tab.id, `EcoShop: Analysis timed out`);
+      const statusUrl = `${apiBaseUrl}/api/product/${productId}/status`;
+      const response = await fetch(statusUrl, {
+        method: 'GET',
+        mode: 'cors',
+        cache: 'no-cache'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.status === 'completed') {
+          if (sender && sender.tab && sender.tab.id) {
+            sendToastToTab(sender.tab.id, `EcoShop: Analysis complete! Score: ${data.data.score}`);
+          }
+          return data.data;
+        }
       }
+      
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+    } catch (error) {
+      console.error("Polling error:", error);
     }
-  }, 300000); // 5 minutes
+  }
+  
+  if (sender && sender.tab && sender.tab.id) {
+    sendToastToTab(sender.tab.id, `EcoShop: Analysis taking longer than expected`);
+  }
+  
+  // Return error instead of fallback data
+  throw new Error("Analysis timed out - database connection may be unavailable");
 }
 
 // Handle sustainability data lookup - Production version requires database connection
@@ -243,7 +170,7 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
       
       console.log("Added product to history:", productInfo.brand || productInfo.name);
     }
-
+    
     // Check cache first
     const cacheKey = productInfo.brand?.toLowerCase();
     if (cacheKey && sustainabilityCache[cacheKey]) {
@@ -260,7 +187,9 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
         data: data
       });
       return;
-    }    // Production extension - simplified for testing
+    }
+
+    // Production extension requires database connection - no local fallbacks
     let sustainabilityData = null;
     
     try {
@@ -268,31 +197,18 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
         sendToastToTab(sender.tab.id, `EcoShop: Checking database for ${productInfo.brand || productInfo.name}...`);
       }
       
-      // Get data from API (will return test data if MongoDB is not available)
       sustainabilityData = await fetchFromApi(productInfo);
       
-      // If we got data, return it
-      if (sustainabilityData) {
-        // Cache the result
-        if (cacheKey) {
-          sustainabilityCache[cacheKey] = sustainabilityData;
-        }
-        
+      // Handle polling for products being processed
+      if (sustainabilityData && sustainabilityData.certainty === 'pending' && sustainabilityData.product_id) {
         if (sender && sender.tab && sender.tab.id) {
-          updateBadgeForTab(sender.tab.id, sustainabilityData.score);
-          tabDataCache[sender.tab.id] = sustainabilityData;
+          sendToastToTab(sender.tab.id, `EcoShop: Analyzing sustainability... Please wait.`);
         }
         
-        sendResponse({
-          success: true,
-          data: sustainabilityData
-        });
-        return;
-      } else {
-        // No data received
-        throw new Error("No data received from API");
+        sustainabilityData = await pollForUpdates(sustainabilityData.product_id, sender);
       }
-        } catch (error) {
+      
+    } catch (error) {
       console.log("Database connection failed:", error);
       if (sender && sender.tab && sender.tab.id) {
         sendToastToTab(sender.tab.id, `EcoShop: Database connection failed. Please check your internet connection.`);
@@ -305,6 +221,26 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
       });
       return;
     }
+    
+    // Cache the result if we got valid data
+    if (sustainabilityData && cacheKey) {
+      sustainabilityCache[cacheKey] = sustainabilityData;
+    }
+    
+    // Set the badge for this tab
+    if (sender && sender.tab && sender.tab.id && sustainabilityData) {
+      updateBadgeForTab(sender.tab.id, sustainabilityData.score);
+      tabDataCache[sender.tab.id] = sustainabilityData;
+      
+      const message = `EcoShop: ${sustainabilityData.brand} - Score: ${sustainabilityData.score}/100`;
+      sendToastToTab(sender.tab.id, message);
+    }
+    
+    sendResponse({
+      success: !!sustainabilityData,
+      data: sustainabilityData,
+      error: sustainabilityData ? null : "No sustainability data available"
+    });
     
   } catch (error) {
     console.error("Error in handleSustainabilityCheck:", error);

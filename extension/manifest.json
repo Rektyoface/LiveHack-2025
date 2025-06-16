@@ -15,15 +15,18 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
-  },
-  "permissions": [
+  },  "permissions": [
     "activeTab",
     "storage",
-    "tabs"
+    "tabs",
+    "downloads",
+    "webRequest"
   ],
   "host_permissions": [
     "https://*.shopee.sg/*",
-    "https://*.shopee.com/*"
+    "https://*.shopee.com/*",
+    "http://localhost:5000/*",
+    "https://localhost:5000/*"
   ],
   "content_scripts": [
     {
@@ -33,16 +36,9 @@
       ],
       "js": ["content.js"]
     }
-  ],
-  "background": {
+  ],  "background": {
     "service_worker": "service_worker.js",
     "type": "module"
   },
-  "web_accessible_resources": [
-    {
-      "resources": ["data/esg_scores.json"],
-      "matches": ["<all_urls>"]
-    }
-  ],
   "options_page": "options/options.html"
 }

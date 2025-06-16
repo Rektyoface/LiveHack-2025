@@ -88,13 +88,20 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   });
-
   // Process and display sustainability data
   function handleSustainabilityData(response) {
     loadingElement.classList.add('hidden');
     
-    if (!response || !response.success || !response.data) {
-      showNoProductMessage("No sustainability data available");
+    if (!response || !response.success) {
+      if (response && response.error) {
+        if (response.error.includes("Database connection")) {
+          showNoProductMessage("Database connection required. Please check your internet connection and ensure the backend service is running.");
+        } else {
+          showNoProductMessage(response.message || response.error);
+        }
+      } else {
+        showNoProductMessage("No sustainability data available");
+      }
       return;
     }
     
@@ -241,7 +248,6 @@ document.addEventListener('DOMContentLoaded', function() {
       return "This brand has concerning sustainability practices and should be considered carefully.";
     }
   }
-
   // Button event listeners
   optionsButton.addEventListener('click', () => {
     chrome.runtime.openOptionsPage();

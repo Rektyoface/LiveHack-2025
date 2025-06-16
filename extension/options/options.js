@@ -15,15 +15,12 @@ document.addEventListener('DOMContentLoaded', function() {
   const showAlternativesCheckbox = document.getElementById('show-alternatives');
   const badgePositionSelect = document.getElementById('badge-position');
   const darkModeCheckbox = document.getElementById('dark-mode');
-  
-  const apiEndpointInput = document.getElementById('api-endpoint');
-  const useLocalDataCheckbox = document.getElementById('use-local-data');
+    const apiEndpointInput = document.getElementById('api-endpoint');
   const dataContributionCheckbox = document.getElementById('data-contribution');
   
   const restoreDefaultsButton = document.getElementById('restore-defaults');
   const saveSettingsButton = document.getElementById('save-settings');
   const statusMessage = document.getElementById('status-message');
-  
   // Default settings
   const defaultSettings = {
     carbonWeight: 3,
@@ -33,9 +30,8 @@ document.addEventListener('DOMContentLoaded', function() {
     showBadge: true,
     showAlternatives: true,
     badgePosition: 'bottom-right',
-    darkMode: true, // Default to dark mode
-    apiEndpoint: '',
-    useLocalData: true,
+    darkMode: true,
+    apiEndpoint: 'http://localhost:5000/api/score',
     dataContribution: false
   };
   
@@ -101,10 +97,8 @@ document.addEventListener('DOMContentLoaded', function() {
       laborWeight: parseInt(laborWeightInput.value),
       showBadge: showBadgeCheckbox.checked,
       showAlternatives: showAlternativesCheckbox.checked,
-      badgePosition: badgePositionSelect.value,
-      darkMode: darkModeCheckbox.checked,
+      badgePosition: badgePositionSelect.value,      darkMode: darkModeCheckbox.checked,
       apiEndpoint: apiEndpointInput.value.trim(),
-      useLocalData: useLocalDataCheckbox.checked,
       dataContribution: dataContributionCheckbox.checked
     };
     
@@ -148,9 +142,7 @@ document.addEventListener('DOMContentLoaded', function() {
       showAlternativesCheckbox.checked = settings.showAlternatives;
       badgePositionSelect.value = settings.badgePosition;
       darkModeCheckbox.checked = darkMode;
-      
-      apiEndpointInput.value = settings.apiEndpoint || '';
-      useLocalDataCheckbox.checked = settings.useLocalData;
+        apiEndpointInput.value = settings.apiEndpoint || '';
       dataContributionCheckbox.checked = settings.dataContribution;
       
       // Apply dark mode if enabled
@@ -177,9 +169,7 @@ document.addEventListener('DOMContentLoaded', function() {
     showAlternativesCheckbox.checked = defaultSettings.showAlternatives;
     badgePositionSelect.value = defaultSettings.badgePosition;
     darkModeCheckbox.checked = defaultSettings.darkMode;
-    
-    apiEndpointInput.value = defaultSettings.apiEndpoint;
-    useLocalDataCheckbox.checked = defaultSettings.useLocalData;
+      apiEndpointInput.value = defaultSettings.apiEndpoint;
     dataContributionCheckbox.checked = defaultSettings.dataContribution;
     
     setTheme(defaultSettings.darkMode);

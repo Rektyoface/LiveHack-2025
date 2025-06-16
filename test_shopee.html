@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Shopee Page - Nike Product</title>
+</head>
+<body>
+    <h1>Test Shopee Product Page</h1>
+    
+    <!-- Simulate Shopee product page structure -->
+    <div class="product-detail">
+        <h1 class="YPqix5">Nike Air Max 90 Premium Running Shoes</h1>
+        <div class="qPNIqx">
+            <span>Nike</span>
+        </div>
+        
+        <div class="price">
+            <span>$120.00</span>
+        </div>
+        
+        <div class="product-specifications">
+            <div class="spec-row">
+                <span>Brand:</span>
+                <span>Nike</span>
+            </div>
+            <div class="spec-row">
+                <span>Category:</span>
+                <span>Footwear</span>
+            </div>
+            <div class="spec-row">
+                <span>Material:</span>
+                <span>Synthetic Leather</span>
+            </div>
+        </div>
+    </div>
+    
+    <button onclick="testExtraction()">Test Product Info Extraction</button>
+    
+    <script>
+        // Change the hostname to simulate Shopee
+        Object.defineProperty(window.location, 'hostname', {
+            writable: false,
+            value: 'shopee.sg'
+        });
+        
+        function testExtraction() {
+            console.log("Testing product extraction...");
+            console.log("Current hostname:", window.location.hostname);
+        }
+    </script>
+</body>
+</html>

@@ -19,6 +19,10 @@
   --color-dark-surface: #333333;
   --color-dark-text-primary: #FFFFFF;
   --color-dark-text-secondary: #BBBBBB;
+  
+  /* New export button colors */
+  --color-export: #0288D1;
+  --color-dark-export: #039BE5;
 }
 
 [data-theme="dark"] {
@@ -271,6 +275,36 @@ button:active {
 
 #options-button:hover {
   background-color: rgba(128, 128, 128, 0.1);
+}
+
+.export-button {
+  background-color: var(--color-export);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.export-button:hover {
+  background-color: var(--color-dark-export);
+  transform: translateY(-2px);
+}
+
+.export-button:active {
+  transform: translateY(0);
+  transition: all 0.2s;
+}
+
+.export-button:hover {
+  background-color: var(--color-dark-export);
+  transform: translateY(-2px);
+}
+
+.export-button:active {
+  transform: translateY(0);
 }
 
 /* Website badge at the top */

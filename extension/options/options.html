@@ -84,20 +84,12 @@
         </label>
       </div>
     </div>
-    
-    <div class="settings-section">
-      <h2>Data Sources</h2>
-      
+      <div class="settings-section">
+      <h2>Database Connection</h2>
       <div class="setting-item">
-        <label for="api-endpoint">Custom API Endpoint (Optional)</label>
-        <input type="text" id="api-endpoint" name="api-endpoint" placeholder="https://your-api-endpoint.com/sustainability">
-      </div>
-      
-      <div class="setting-item checkbox-item">
-        <label>
-          <input type="checkbox" id="use-local-data" name="use-local-data" checked>
-          Use local data when offline
-        </label>
+        <label for="api-endpoint">Backend API Endpoint</label>
+        <input type="text" id="api-endpoint" name="api-endpoint" placeholder="http://localhost:5000/api/score">
+        <small>This extension requires a database connection to function.</small>
       </div>
       
       <div class="setting-item checkbox-item">
