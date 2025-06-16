@@ -11,9 +11,51 @@
     
     // Focus only on Shopee as requested
     if (url.includes('shopee.sg') || url.includes('shopee.com')) {
-      // Extract from Shopee
-      productInfo.brand = document.querySelector('.qPNIqx')?.textContent?.trim();
-      productInfo.name = document.querySelector('.YPqix5')?.textContent?.trim();
+      console.log("EcoShop: Detected Shopee website");
+      
+      // Updated selectors for Shopee (more comprehensive)
+      // Try various potential selectors that might contain brand information
+      const brandSelectors = [
+        '.qPNIqx', // Original selector
+        '[data-testid="shopBrandName"]',
+        '.shop-name',
+        '.seller-name',
+        '.brand-name',
+        '.qPNIqx span', // Child elements
+        '.item-brand',
+        '.product-brand'
+      ];
+      
+      // Try various selectors for product name
+      const nameSelectors = [
+        '.YPqix5', // Original selector
+        '.product-name',
+        '.product-title',
+        '.item-name',
+        '.product-detail__name',
+        'h1', // Often product names are in h1 tags
+        '[data-testid="productTitle"]'
+      ];
+      
+      // Try each potential brand selector
+      for (const selector of brandSelectors) {
+        const element = document.querySelector(selector);
+        if (element && element.textContent?.trim()) {
+          productInfo.brand = element.textContent.trim();
+          console.log("EcoShop: Found brand using selector", selector, productInfo.brand);
+          break;
+        }
+      }
+      
+      // Try each potential name selector
+      for (const selector of nameSelectors) {
+        const element = document.querySelector(selector);
+        if (element && element.textContent?.trim()) {
+          productInfo.name = element.textContent.trim();
+          console.log("EcoShop: Found product name using selector", selector, productInfo.name);
+          break;
+        }
+      }
     }
     
     // Fallback method if specific selectors fail
@@ -23,8 +65,24 @@
                         document.querySelector('meta[property="og:brand"]')?.content;
       const metaName = document.querySelector('meta[property="og:title"]')?.content;
       
-      if (metaBrand) productInfo.brand = metaBrand;
-      if (metaName) productInfo.name = metaName;
+      if (metaBrand) {
+        productInfo.brand = metaBrand;
+        console.log("EcoShop: Found brand using meta tags", productInfo.brand);
+      }
+      if (metaName) {
+        productInfo.name = metaName;
+        console.log("EcoShop: Found name using meta tags", productInfo.name);
+      }
+      
+      // If brand is still not found but we have a name, try to extract brand from title
+      if (!productInfo.brand && productInfo.name) {
+        // Try simple heuristics to extract brand from product name
+        const words = productInfo.name.split(' ');
+        if (words[0] && words[0][0] === words[0][0].toUpperCase()) {
+          productInfo.brand = words[0];
+          console.log("EcoShop: Extracted brand from name", productInfo.brand);
+        }
+      }
     }
     
     console.log("EcoShop extracted product info:", productInfo);
@@ -33,6 +91,7 @@
   
   // Send product info to the service worker
   function sendToServiceWorker(productInfo) {
+    console.log("EcoShop: Sending to service worker", productInfo);
     chrome.runtime.sendMessage({ 
       action: "checkSustainability", 
       productInfo: productInfo 
@@ -130,6 +189,7 @@
     `;
     
     document.body.appendChild(badge);
+    console.log("EcoShop: Badge displayed");
     
     // Add hover effect
     badge.addEventListener('mouseenter', () => {
@@ -221,12 +281,47 @@
   
   // Wait for the page to fully load
   window.addEventListener('load', () => {
-    // Give the page a moment to fully render dynamic content
+    // First attempt to extract product info
     setTimeout(() => {
       const productInfo = extractProductInfo();
       if (productInfo.brand || productInfo.name) {
         sendToServiceWorker(productInfo);
+      } else {
+        console.log("EcoShop: Initial extraction failed, trying again in 2 seconds");
+        // Try again after a longer delay for dynamic content
+        setTimeout(() => {
+          const productInfo = extractProductInfo();
+          if (productInfo.brand || productInfo.name) {
+            sendToServiceWorker(productInfo);
+          } else {
+            console.log("EcoShop: Could not extract product information");
+          }
+        }, 2000);
       }
-    }, 2000);
+    }, 1000);
   });
+  
+  // Also try extraction when DOM content changes
+  // This helps with single-page apps or sites that load content dynamically
+  const observer = new MutationObserver((mutations) => {
+    // Only check if we haven't already displayed a badge
+    if (!document.getElementById('ecoshop-sustainability-badge')) {
+      const productInfo = extractProductInfo();
+      if (productInfo.brand || productInfo.name) {
+        sendToServiceWorker(productInfo);
+        // Disconnect after successful extraction
+        observer.disconnect();
+      }
+    }
+  });
+  
+  // Start observing once the initial page is loaded
+  setTimeout(() => {
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: false,
+      characterData: false
+    });
+  }, 3000);
 })();
