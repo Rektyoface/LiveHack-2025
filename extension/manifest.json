@@ -38,5 +38,11 @@
     "service_worker": "service_worker.js",
     "type": "module"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["data/esg_scores.json"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "options_page": "options/options.html"
 }
