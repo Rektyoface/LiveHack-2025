@@ -1,0 +1,238 @@
+/* EcoShop Popup Styles */
+:root {
+  --color-primary: #2E7D32;
+  --color-secondary: #81C784;
+  --color-light: #E8F5E9;
+  --color-dark: #1B5E20;
+  --color-warning: #FFC107;
+  --color-danger: #F44336;
+  --color-text-primary: #212121;
+  --color-text-secondary: #757575;
+  --color-background: #FFFFFF;
+  --border-radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background-color: var(--color-background);
+  width: 360px;
+  min-height: 480px;
+}
+
+.container {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-light);
+}
+
+header h1 {
+  color: var(--color-primary);
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+header .tagline {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+}
+
+.loader {
+  border: 5px solid var(--color-light);
+  border-top: 5px solid var(--color-primary);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1.5s linear infinite;
+  margin-bottom: 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.hidden {
+  display: none;
+}
+
+.message-container {
+  background-color: var(--color-light);
+  padding: 15px;
+  border-radius: var(--border-radius);
+  margin: 15px 0;
+  text-align: center;
+}
+
+.brand-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.brand-container h2 {
+  font-size: 18px;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.score-badge {
+  background-color: var(--color-primary);
+  color: white;
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+}
+
+.score-badge #score-value {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.score-badge span:last-child {
+  font-size: 12px;
+}
+
+.sustainability-metrics {
+  margin-bottom: 20px;
+}
+
+.metric {
+  margin-bottom: 15px;
+}
+
+.metric h3 {
+  font-size: 14px;
+  margin-bottom: 5px;
+  color: var(--color-text-primary);
+}
+
+.metric-value {
+  font-weight: 500;
+  margin-bottom: 5px;
+  font-size: 15px;
+}
+
+.meter {
+  height: 8px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.meter-bar {
+  height: 100%;
+  background-color: var(--color-primary);
+  border-radius: 4px;
+  transition: width 0.8s ease;
+}
+
+.data-quality {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-bottom: 15px;
+}
+
+.alternatives-container {
+  margin-top: 20px;
+}
+
+.alternatives-container h3 {
+  font-size: 16px;
+  margin-bottom: 10px;
+  color: var(--color-primary);
+}
+
+.alternative-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--color-light);
+  padding: 10px;
+  border-radius: var(--border-radius);
+  margin-bottom: 8px;
+}
+
+.alternative-item:hover {
+  background-color: #d7eed9;
+  cursor: pointer;
+}
+
+.alternative-score {
+  background-color: var(--color-primary);
+  color: white;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  font-size: 12px;
+}
+
+footer {
+  margin-top: auto;
+  padding-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--color-light);
+}
+
+button {
+  background-color: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+button:hover {
+  background-color: var(--color-dark);
+}
+
+#options-button {
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-text-secondary);
+}
+
+#options-button:hover {
+  background-color: #f0f0f0;
+}
