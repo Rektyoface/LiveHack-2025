@@ -9,17 +9,11 @@
       url: window.location.href
     };
     
-    // Add more website detection logic
+    // Focus only on Shopee as requested
     if (url.includes('shopee.sg') || url.includes('shopee.com')) {
       // Extract from Shopee
       productInfo.brand = document.querySelector('.qPNIqx')?.textContent?.trim();
       productInfo.name = document.querySelector('.YPqix5')?.textContent?.trim();
-    } else if (url.includes('amazon')) {
-      productInfo.brand = document.querySelector('#bylineInfo')?.textContent?.trim();
-      productInfo.name = document.querySelector('#productTitle')?.textContent?.trim();
-    } else if (url.includes('lazada')) {
-      productInfo.brand = document.querySelector('.pdp-product-brand')?.textContent?.trim();
-      productInfo.name = document.querySelector('.pdp-mod-product-name')?.textContent?.trim();
     }
     
     // Fallback method if specific selectors fail
@@ -51,11 +45,18 @@
     });
   }
   
-  // Get user preference for dark/light mode
-  async function getUserTheme() {
+  // Get user preference for badge position and dark mode
+  async function getUserPreferences() {
     return new Promise(resolve => {
-      chrome.storage.sync.get({ 'darkMode': true }, // Default to dark mode
-        (result) => resolve(result.darkMode)
+      chrome.storage.sync.get(
+        { 
+          'darkMode': true, // Default to dark mode
+          'settings': { badgePosition: 'bottom-right' } // Default position
+        }, 
+        (result) => resolve({
+          darkMode: result.darkMode,
+          badgePosition: result.settings?.badgePosition || 'bottom-right'
+        })
       );
     });
   }
@@ -68,16 +69,36 @@
       document.body.removeChild(badge);
     }
     
-    // Get user theme preference
-    const darkMode = await getUserTheme();
+    // Get user preferences
+    const preferences = await getUserPreferences();
+    const darkMode = preferences.darkMode;
     
     // Create floating badge
     badge = document.createElement('div');
     badge.id = 'ecoshop-sustainability-badge';
+    
+    // Apply position based on user preference
+    let positionStyles = '';
+    switch (preferences.badgePosition) {
+      case 'bottom-right':
+        positionStyles = 'bottom: 40px; right: 20px;'; // Moved up by 20px to avoid Shopee chat button
+        break;
+      case 'bottom-left':
+        positionStyles = 'bottom: 40px; left: 20px;';
+        break;
+      case 'top-right':
+        positionStyles = 'top: 20px; right: 20px;';
+        break;
+      case 'top-left':
+        positionStyles = 'top: 20px; left: 20px;';
+        break;
+      default:
+        positionStyles = 'bottom: 40px; right: 20px;';
+    }
+    
     badge.style.cssText = `
       position: fixed;
-      bottom: 40px; /* Moved up by 20px to avoid Shopee chat button */
-      right: 20px;
+      ${positionStyles}
       background-color: ${darkMode ? '#222' : 'white'};
       color: ${darkMode ? '#fff' : '#333'};
       border: 2px solid #${getColorForScore(sustainabilityData.score)};
@@ -117,34 +138,6 @@
     badge.addEventListener('click', () => {
       chrome.runtime.sendMessage({ action: "openPopup" });
     });
-    
-    // Add theme toggle button
-    const themeToggle = document.createElement('div');
-    themeToggle.style.cssText = `
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      background-color: ${darkMode ? '#fff' : '#222'};
-      cursor: pointer;
-      border: 1px solid #ccc;
-    `;
-    
-    themeToggle.addEventListener('click', async (e) => {
-      e.stopPropagation(); // Prevent triggering badge click
-      const currentTheme = await getUserTheme();
-      const newTheme = !currentTheme;
-      chrome.storage.sync.set({ 'darkMode': newTheme });
-      badge.style.backgroundColor = newTheme ? '#222' : 'white';
-      badge.style.color = newTheme ? '#fff' : '#333';
-      const headerText = badge.querySelector('h3');
-      if (headerText) headerText.style.color = newTheme ? '#fff' : '#333';
-      themeToggle.style.backgroundColor = newTheme ? '#fff' : '#222';
-    });
-    
-    badge.appendChild(themeToggle);
   }
   
   // Get color based on sustainability score

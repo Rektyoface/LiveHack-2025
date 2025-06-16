@@ -15,7 +15,6 @@ document.addEventListener('DOMContentLoaded', function() {
   const showAlternativesCheckbox = document.getElementById('show-alternatives');
   const badgePositionSelect = document.getElementById('badge-position');
   const darkModeCheckbox = document.getElementById('dark-mode');
-  const themeToggleInput = document.getElementById('theme-toggle-input');
   
   const apiEndpointInput = document.getElementById('api-endpoint');
   const useLocalDataCheckbox = document.getElementById('use-local-data');
@@ -46,29 +45,15 @@ document.addEventListener('DOMContentLoaded', function() {
   // Load settings when the page loads
   loadSettings();
   
-  // Theme toggle functionality
-  themeToggleInput.addEventListener('change', function() {
-    const isDarkMode = this.checked;
-    setTheme(isDarkMode);
-    darkModeCheckbox.checked = isDarkMode; // Keep the two toggles in sync
-    
-    // Save preference to storage
-    chrome.storage.sync.set({ 'darkMode': isDarkMode });
-  });
-  
   // Initialize theme from saved preference
   async function initTheme() {
     try {
       const result = await chrome.storage.sync.get({ 'darkMode': true });
       setTheme(result.darkMode);
-      themeToggleInput.checked = result.darkMode;
-      if (darkModeCheckbox) darkModeCheckbox.checked = result.darkMode;
     } catch (error) {
       console.error("Error loading theme preference:", error);
       // Default to dark mode
       setTheme(true);
-      themeToggleInput.checked = true;
-      if (darkModeCheckbox) darkModeCheckbox.checked = true;
     }
   }
   
@@ -104,7 +89,6 @@ document.addEventListener('DOMContentLoaded', function() {
   darkModeCheckbox.addEventListener('change', () => {
     const isDarkMode = darkModeCheckbox.checked;
     setTheme(isDarkMode);
-    themeToggleInput.checked = isDarkMode; // Keep the two toggles in sync
     chrome.storage.sync.set({ 'darkMode': isDarkMode });
   });
   
@@ -164,7 +148,6 @@ document.addEventListener('DOMContentLoaded', function() {
       showAlternativesCheckbox.checked = settings.showAlternatives;
       badgePositionSelect.value = settings.badgePosition;
       darkModeCheckbox.checked = darkMode;
-      themeToggleInput.checked = darkMode;
       
       apiEndpointInput.value = settings.apiEndpoint || '';
       useLocalDataCheckbox.checked = settings.useLocalData;
@@ -194,7 +177,6 @@ document.addEventListener('DOMContentLoaded', function() {
     showAlternativesCheckbox.checked = defaultSettings.showAlternatives;
     badgePositionSelect.value = defaultSettings.badgePosition;
     darkModeCheckbox.checked = defaultSettings.darkMode;
-    themeToggleInput.checked = defaultSettings.darkMode;
     
     apiEndpointInput.value = defaultSettings.apiEndpoint;
     useLocalDataCheckbox.checked = defaultSettings.useLocalData;

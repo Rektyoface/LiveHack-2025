@@ -22,16 +22,14 @@
     "tabs"
   ],
   "host_permissions": [
-    "https://*/*"
+    "https://*.shopee.sg/*",
+    "https://*.shopee.com/*"
   ],
   "content_scripts": [
     {
       "matches": [
         "https://*.shopee.sg/*",
-        "https://*.shopee.com/*",
-        "https://*.amazon.com/*", 
-        "https://*.lazada.com/*",
-        "https://*.etsy.com/*"
+        "https://*.shopee.com/*"
       ],
       "js": ["content.js"]
     }

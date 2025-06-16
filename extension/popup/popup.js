@@ -20,31 +20,20 @@ document.addEventListener('DOMContentLoaded', function() {
   const alternativesListElement = document.getElementById('alternatives-list');
   const optionsButton = document.getElementById('options-button');
   const learnMoreButton = document.getElementById('learn-more');
-  const themeToggleInput = document.getElementById('theme-toggle-input');
   const websiteBadge = document.getElementById('website-badge');
 
   // Initialize dark mode from storage
   initTheme();
-
-  // Theme toggle functionality
-  themeToggleInput.addEventListener('change', function() {
-    const isDarkMode = this.checked;
-    setTheme(isDarkMode);
-    // Save preference to storage
-    chrome.storage.sync.set({ 'darkMode': isDarkMode });
-  });
-
+  
   // Initialize theme from saved preference
   async function initTheme() {
     try {
       const result = await chrome.storage.sync.get({ 'darkMode': true });
       setTheme(result.darkMode);
-      themeToggleInput.checked = result.darkMode;
     } catch (error) {
       console.error("Error loading theme preference:", error);
       // Default to dark mode
       setTheme(true);
-      themeToggleInput.checked = true;
     }
   }
 
@@ -67,19 +56,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const url = new URL(currentTab.url);
     websiteBadge.textContent = url.hostname;
     
-    // Check if the URL is a supported e-commerce site
-    const supportedSites = [
-      'amazon.com',
-      'shopee.sg',
-      'shopee.com',
-      'etsy.com',
-      'lazada.com'
-    ];
+    // Check if the URL is Shopee
+    const isShopee = currentTab.url.includes('shopee.sg') || currentTab.url.includes('shopee.com');
     
-    const isProductPage = supportedSites.some(site => currentTab.url.includes(site));
-    
-    if (!isProductPage) {
-      showNoProductMessage("Visit a supported shopping site to see sustainability ratings");
+    if (!isShopee) {
+      showNoProductMessage("Visit Shopee to see sustainability ratings");
       return;
     }
     
