@@ -1,0 +1,120 @@
+# EcoShop - Sustainability Shopping Companion Todo List
+
+## High Priority Tasks
+
+### Icon Generation
+- [ ] Convert SVG icon placeholders to PNG format (16px, 48px, 128px)
+- [ ] Create a more polished/professional icon design
+- [ ] Add icon to browser toolbar with appropriate status indicators
+
+### Extension Core
+- [ ] Test content script on actual product pages across all supported stores
+- [ ] Improve DOM selectors for more reliable product/brand extraction
+- [ ] Add support for more e-commerce platforms (Walmart, Target, etc.)
+- [ ] Implement proper error handling in service worker
+- [ ] Handle edge cases like unknown brands/products
+- [ ] Add loading states and error messages for users
+
+### Data Sources
+- [ ] Replace example API URLs in fetch_esg_data.py with actual API endpoints
+- [ ] Implement API keys and authentication for real sustainability data sources
+- [ ] Add more brands to the esg_scores.json sample data
+- [ ] Connect to a real ESG/sustainability database API
+- [ ] Set up automated data refresh schedule
+
+## Medium Priority Tasks
+
+### UI/UX Improvements
+- [ ] Test dark mode implementation in the extension popup and options
+- [ ] Add animations for score displays and transitions
+- [ ] Implement onboarding experience for first-time users
+- [ ] Add help tooltips explaining sustainability metrics
+- [ ] Create more detailed sustainability report view
+- [ ] Test UI on different browser sizes/zoom levels
+
+### Backend API
+- [ ] Set up proper DB instead of using JSON file (PostgreSQL/MongoDB)
+- [ ] Add authentication for API endpoints
+- [ ] Implement rate limiting
+- [ ] Deploy backend to cloud provider (Heroku/AWS/GCP)
+- [ ] Add analytics endpoint to track usage patterns
+- [ ] Create admin dashboard for data management
+
+### Performance Optimization
+- [ ] Implement better caching of sustainability data
+- [ ] Optimize DOM manipulation in content script
+- [ ] Reduce bundle size for faster loading
+- [ ] Add lazy loading for non-critical components
+- [ ] Improve search algorithm for brand matching
+
+## Low Priority / Stretch Goals
+
+### Additional Features
+- [ ] Implement browser history monitoring for retroactive product scoring
+- [ ] Create "sustainability report" for monthly shopping habits
+- [ ] Add barcode scanner support for physical store shopping
+- [ ] Create mobile companion app
+- [ ] Add social sharing features for sustainable product finds
+- [ ] Implement gamification elements (sustainability score, badges)
+
+### Developer Experience
+- [ ] Set up automated testing pipeline
+- [ ] Create CI/CD workflow for extension releases
+- [ ] Add comprehensive JSDoc documentation
+- [ ] Set up linting and formatting rules
+- [ ] Create developer documentation for contributing
+
+### Browser Compatibility
+- [ ] Test in Chrome/Edge/Firefox/Brave
+- [ ] Address browser-specific API differences
+- [ ] Create Firefox-specific manifest
+- [ ] Test in Safari (if possible)
+
+## Technical Debt / Code Quality
+
+### Refactoring
+- [ ] Clean up CSS with consistent naming conventions
+- [ ] Modularize JavaScript better with import/export
+- [ ] Create TypeScript definitions for data structures
+- [ ] Implement proper state management pattern
+- [ ] Extract common utilities into shared modules
+
+### Testing
+- [ ] Write unit tests for core functionality
+- [ ] Create integration tests for extension popup
+- [ ] Mock API responses for testing
+- [ ] Write end-to-end tests for common user flows
+- [ ] Set up automated cross-browser testing
+
+## Documentation & User Support
+
+### Documentation
+- [ ] Create detailed installation guide with screenshots
+- [ ] Write user manual explaining all features
+- [ ] Document API endpoints for developers
+- [ ] Add examples for extending the codebase
+- [ ] Create architecture diagram for the project
+
+### User Support
+- [ ] Create FAQ section
+- [ ] Set up user feedback form
+- [ ] Implement guided tutorial for first-time users
+- [ ] Create support contact system
+- [ ] Write privacy policy and data handling documentation
+
+## Deployment & Distribution
+
+### Extension Store
+- [ ] Create production build process
+- [ ] Write compelling store descriptions
+- [ ] Design attractive screenshots for store listing
+- [ ] Prepare promotional materials
+- [ ] Submit to Chrome Web Store
+- [ ] Submit to Firefox Add-ons marketplace
+
+### Marketing & Growth
+- [ ] Create landing page website
+- [ ] Set up social media accounts
+- [ ] Create short demo video
+- [ ] Write blog post about the technology
+- [ ] Develop strategy for user acquisition
