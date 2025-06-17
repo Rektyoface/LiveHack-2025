@@ -3,22 +3,24 @@ from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 import certifi
 import ssl
+import logging
+
+# --- Logging Setup ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('db')
 
 # Import configuration variables from config.py (same directory)
 try:
-    print("DEBUG: Attempting to import config from db.py...")
+    logger.info("Attempting to import config from db.py...")
     import os
-    print(f"DEBUG: db.py current working directory: {os.getcwd()}")
-    print(f"DEBUG: db.py file location: {os.path.abspath(__file__)}")
-    print(f"DEBUG: db.py directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+    logger.debug(f"db.py current working directory: {os.getcwd()}")
+    logger.debug(f"db.py file location: {os.path.abspath(__file__)}")
+    logger.debug(f"db.py directory: {os.path.dirname(os.path.abspath(__file__))}")
     from config import MONGO_URI, MONGO_PRODUCTS_COLLECTION, MONGO_DB
-    print("DEBUG: config import successful in db.py")
-    # Use the main collection as products collection for now
-
+    logger.info("Config import successful in db.py")
 except ImportError as e:
-    print(f"DEBUG: ImportError in db.py: {e}")
-    print("Error: config.py not found or missing required variables.")
+    logger.error(f"ImportError in db.py: {e}")
+    logger.error("Error: config.py not found or missing required variables.")
     # Set to None so the application can gracefully handle the missing config
     MONGO_URI = None
     MONGO_DB = None
@@ -37,29 +39,29 @@ def connect_to_db():
         try:
             # Create a new client and connect to the server
             client = MongoClient(MONGO_URI, tls=True, tlsCAFile=certifi.where())
-            
+            logger.info("MongoClient created.")
+
             # Send a ping to confirm a successful connection
             client.admin.command('ping')
-            print("Pinged your deployment. You successfully connected to MongoDB!")
+            logger.info("Pinged your deployment. You successfully connected to MongoDB!")
 
             # Get the database and collection
             db = client[MONGO_DB]
             products_collection = db[MONGO_PRODUCTS_COLLECTION]
-              # CRUCIAL: Create the unique index for efficient lookups
-            print(f"Ensuring unique index exists on collection: '{MONGO_PRODUCTS_COLLECTION}'...")
+            logger.info(f"Ensuring unique index exists on collection: '{MONGO_PRODUCTS_COLLECTION}'...")
             products_collection.create_index([("source_site", 1), ("listing_id", 1)], unique=True)
-            print("Index is ready.")
+            logger.info("Index is ready.")
 
             return products_collection
 
         except ConnectionFailure as e:
-            print(f"Could not connect to MongoDB: {e}")
+            logger.error(f"Could not connect to MongoDB: {e}")
             return None
         except Exception as e:
-            print(f"An error occurred: {e}")
+            logger.error(f"An error occurred: {e}")
             return None
     else:
-        print("MongoDB configuration is missing. Running in offline mode.")
+        logger.error("Missing MongoDB configuration variables.")
         return None
 
 # Initialize the connection when this module is imported

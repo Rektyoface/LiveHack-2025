@@ -1,6 +1,10 @@
 # scripts/url_parser.py (Robust, re-based Version)
 
 import re
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('url_parser')
 
 def parse_shopee_url(url: str) -> dict | None:
     """
@@ -21,6 +25,7 @@ def parse_shopee_url(url: str) -> dict | None:
         Returns None if the URL is not a valid or recognizable Shopee product URL.
     """
     if not url:
+        logger.warning("No URL provided to parse_shopee_url.")
         return None
 
     try:
@@ -32,6 +37,7 @@ def parse_shopee_url(url: str) -> dict | None:
 
         # Ensure it's a valid Shopee domain
         if 'shopee' not in source_site:
+            logger.warning(f"URL does not contain a valid Shopee domain: {url}")
             return None
 
         # --- 2. Define a regular expression to find the Shopee ID pattern ---
@@ -53,16 +59,17 @@ def parse_shopee_url(url: str) -> dict | None:
             # Create our clean, composite ID for the database
             composite_listing_id = f"{shop_id}_{item_id}"
             
+            logger.info(f"Parsed Shopee URL: source_site={source_site}, listing_id={composite_listing_id}")
             return {
                 "source_site": source_site,
                 "listing_id": composite_listing_id,
             }
         
-        # If the pattern was not found anywhere in the URL, it's invalid
+        logger.warning(f"No valid Shopee ID pattern found in URL: {url}")
         return None
 
-    except (IndexError, AttributeError):
-        # This will catch errors if the URL is malformed and split() fails
+    except Exception as e:
+        logger.error(f"Error parsing Shopee URL: {e}")
         return None
 
 # This block allows you to test the file directly by running `python url_parser.py`

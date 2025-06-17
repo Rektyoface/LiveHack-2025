@@ -22,6 +22,11 @@ RATING_SCORES = {
     'Unknown': 0.0, # Treat 'Unknown' as a neutral 0.0 score.
 }
 
+import json
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('scorer')
 
 # ==============================================================================
 # Part 2: Scorer Functions
@@ -48,11 +53,13 @@ def generate_sustainability_breakdown(analysis_json: dict) -> dict:
     # Iterate through our three main categories
     for category, details in sustainability_analysis.items():
         rating = details.get('rating', 'Unknown')
+        logger.debug(f"Processing category: {category}, rating: {rating}")
         breakdown[category] = {
             "value": rating,  # The qualitative rating (e.g., "Good")
             "score": RATING_SCORES.get(rating, 0.0), # The quantitative score
             "analysis": details.get('analysis', 'No analysis provided.')
         }
+    logger.info(f"Generated breakdown: {json.dumps(breakdown, indent=2)}")
     return breakdown
 
 
@@ -73,25 +80,19 @@ def calculate_weighted_score(sustainability_breakdown: dict, user_weights: dict 
     logger.info(f"User weights: {user_weights}")
     
     # Use user-provided weights, or fall back to the defaults
-    weights = user_weights or DEFAULT_WEIGHTS
+    weights = user_weights if user_weights else DEFAULT_WEIGHTS
     logger.info(f"Using weights: {weights}")
-    
-    total_weighted_score = 0
-    total_weight = 0
-    
     logger.info("Processing each category...")
-    # Iterate through the breakdown object to calculate the total score
-    for category, breakdown_details in sustainability_breakdown.items():
-        # Get the normalized score (-1.0 to 1.0) for the category
-        score = breakdown_details.get('score', 0.0)
-        # Get the user's weight for that category
-        weight = weights.get(category, 0)
-        
+    total_weighted_score = 0.0
+    total_weight = 0.0
+    
+    for category, details in sustainability_breakdown.items():
+        score = details.get('score', 0.0)
+        weight = weights.get(category, 1)
         weighted_contribution = score * weight
+        logger.info(f"  {category}: score={score}, weight={weight}, contribution={weighted_contribution}")
         total_weighted_score += weighted_contribution
         total_weight += weight
-        
-        logger.info(f"  {category}: score={score}, weight={weight}, contribution={weighted_contribution}")
     
     logger.info(f"Total weighted score: {total_weighted_score}")
     logger.info(f"Total weight: {total_weight}")
