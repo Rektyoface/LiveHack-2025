@@ -375,11 +375,13 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
       sendResponse({ success: true, data });
       return;
     }
-    
-    // 1. Try backend API
+      // 1. Try backend API
     try {
       const apiData = await fetchFromApi(transformed, productInfo.brand);
       if (apiData) {
+        console.log("=== SERVICE WORKER: SENDING TO POPUP ===");
+        console.log("Data being sent to popup:", JSON.stringify(apiData, null, 2));
+        
         if (cacheKey) sustainabilityCache[cacheKey] = apiData;
         if (sender?.tab?.id) {
           updateBadgeForTab(sender.tab.id, apiData.score);
@@ -495,9 +497,23 @@ async function fetchFromApi(transformedTextPayload, brandForFallback) {
           throw new Error("No data available for this brand");
         }
       }
+        const responseData = await response.json();
+      console.log("=== SERVICE WORKER: RAW API RESPONSE ===");
+      console.log("API response:", JSON.stringify(responseData, null, 2));
       
-      const responseData = await response.json();
-      console.log("API response:", responseData);
+      if (responseData && responseData.data) {
+        console.log("=== SERVICE WORKER: API DATA DETAILED ===");
+        console.log("Data keys:", Object.keys(responseData.data));
+        console.log("Recommendations in response:", responseData.data.recommendations);
+        console.log("Recommendations count:", responseData.data.recommendations ? responseData.data.recommendations.length : 0);
+        
+        if (responseData.data.recommendations && responseData.data.recommendations.length > 0) {
+          console.log("=== SERVICE WORKER: RECOMMENDATIONS DETAILED ===");
+          responseData.data.recommendations.forEach((rec, index) => {
+            console.log(`Recommendation ${index + 1}:`, JSON.stringify(rec, null, 2));
+          });
+        }
+      }
       
       if (responseData && responseData.success) {
         if (responseData.status === 'found') {
