@@ -44,7 +44,7 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         personalized score, or None if the process fails at any step.
     """
     # --- Guard Clause: Ensure database is connected ---
-    if not products_collection:
+    if products_collection is None:
         print("Error: Database is not connected. Cannot process URL.")
         return None
 
