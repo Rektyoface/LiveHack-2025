@@ -1,105 +1,62 @@
+# scripts/scorer.py (Simplified Version - No Confidence Score)
+
 # ==============================================================================
-# Part 1: Configuration - Default Weights and Scoring Maps
+# Part 1: Configuration
 # ==============================================================================
 
-# This dictionary represents the standard weights if the user provides none.
-# The values represent the importance of each category on a relative scale.
+# Default weights for the three-category model.
+# These represent the relative importance of each category.
 DEFAULT_WEIGHTS = {
-    "materials": 3,
-    "durability": 3,
-    "logistics": 2,
-    "packaging": 1,
-    "certifications": 4,
+    "material_composition": 4,
+    "production_and_brand": 4,
+    "circularity_and_end_of_life": 2,
 }
 
-# These maps convert the LLM's text analysis into normalized numerical values.
+# A single, standardized map for converting the LLM's ratings into numerical scores.
 # The scale is from -1.0 (very bad) to 1.0 (very good).
-MATERIAL_SCORES = {
-    'Recycled': 1.0,
-    'Natural': 0.8,
-    'Wood': 0.8,
-    'Synthetic (Recycled)': 0.6,
-    'Metal': 0.2,
-    'Mixed': -0.4,
-    'Synthetic': -0.8,
-    'Unknown': 0.0,
+RATING_SCORES = {
+    'Excellent': 1.0,
+    'Good': 0.6,
+    'Neutral': 0.0,
+    'Poor': -1.0,
+    'Unknown': 0.0, # Treat 'Unknown' as a neutral 0.0 score.
 }
-DURABILITY_SCORES = {'High': 1.0, 'Medium': 0.5, 'Low': -1.0, 'Unknown': 0.0}
-LOGISTICS_SCORES = {'Local': 1.0, 'Regional': 0.3, 'International': -0.8, 'Unknown': 0.0}
-PACKAGING_SCORES = {'Eco-friendly': 1.0, 'Plastic-free': 0.8, 'Standard': 0.0, 'Not Mentioned': 0.0}
 
 
 # ==============================================================================
-# Part 2: Function to Generate the Sustainability Breakdown
+# Part 2: Scorer Functions
 # ==============================================================================
 
 def generate_sustainability_breakdown(analysis_json: dict) -> dict:
     """
-    Translates the text-based LLM analysis into a rich breakdown object.
-
-    This object contains both the qualitative value (e.g., "Medium") and the
-    quantitative score (e.g., 0.5) for each component, making it perfect for
-    both display and calculation.
+    Extracts the new three-category breakdown structure from the LLM's analysis.
+    This creates the rich object used for both display and calculation.
 
     Args:
-        analysis_json: The full, structured JSON object from the LLM in analyzer.py.
+        analysis_json: The full structured JSON object from the analyzer.
 
     Returns:
         A dictionary containing the detailed sustainability breakdown.
     """
     breakdown = {}
+    # The new analysis is nested under the 'sustainability_analysis' key
+    sustainability_analysis = analysis_json.get('sustainability_analysis', {})
     
-    # --- Materials Breakdown ---
-    material_type = analysis_json.get('materials', {}).get('type', 'Unknown')
-    breakdown['materials'] = {
-        "value": material_type,
-        "score": MATERIAL_SCORES.get(material_type, 0.0)
-    }
-    
-    # --- Durability Breakdown ---
-    durability_assessment = analysis_json.get('durability_and_longevity', {}).get('assessment', 'Unknown')
-    breakdown['durability'] = {
-        "value": durability_assessment,
-        "score": DURABILITY_SCORES.get(durability_assessment, 0.0)
-    }
-    
-    # --- Logistics Breakdown ---
-    distance_implication = analysis_json.get('logistics_and_shipping', {}).get('shipping_distance_implication', 'Unknown')
-    breakdown['logistics'] = {
-        "value": distance_implication,
-        "score": LOGISTICS_SCORES.get(distance_implication, 0.0)
-    }
-
-    # --- Packaging Breakdown ---
-    packaging_desc = analysis_json.get('packaging', {}).get('description', 'Not Mentioned')
-    packaging_value = 'Not Mentioned'
-    if 'plastic-free' in packaging_desc.lower() or 'eco-friendly' in packaging_desc.lower():
-        packaging_value = 'Eco-friendly'
-    breakdown['packaging'] = {
-        "value": packaging_value,
-        "score": PACKAGING_SCORES.get(packaging_value, 0.0)
-    }
-
-    # --- Certifications Breakdown ---
-    cert_list = analysis_json.get('certifications', {}).get('list', [])
-    cert_count = len(cert_list)
-    cert_value = f"{cert_count} Claim(s)" if cert_count > 0 else "None"
-    breakdown['certifications'] = {
-        "value": cert_value,
-        "score": min(1.0, cert_count * 0.5) # 0.5 points per cert, max of 1.0
-    }
-
+    # Iterate through our three main categories
+    for category, details in sustainability_analysis.items():
+        rating = details.get('rating', 'Unknown')
+        breakdown[category] = {
+            "value": rating,  # The qualitative rating (e.g., "Good")
+            "score": RATING_SCORES.get(rating, 0.0), # The quantitative score
+            "analysis": details.get('analysis', 'No analysis provided.')
+        }
     return breakdown
 
-
-# ==============================================================================
-# Part 3: Function to Calculate the Final Weighted Score
-# ==============================================================================
 
 def calculate_weighted_score(sustainability_breakdown: dict, user_weights: dict | None = None) -> int:
     """
     Calculates the final 0-100 score from the breakdown object and weights.
-    This function is extremely fast as it only does mathematical operations.
+    This is a direct, unadjusted calculation.
 
     Args:
         sustainability_breakdown: The object generated by generate_sustainability_breakdown().
