@@ -164,7 +164,7 @@ def extract_and_rate_product():
         }
         
         logger.info(f"--- FINAL RESPONSE TO EXTENSION (from shopee_processor) ---")
-        logger.info(f"{json.dumps({'success': True, 'data': final_response_data}, indent=2)}")
+        logger.info(f"RESPONSE JSON: {json.dumps({'success': True, 'data': final_response_data}, indent=2)}")
         return jsonify({'success': True, 'data': final_response_data})
 
     except Exception as e:

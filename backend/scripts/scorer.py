@@ -1,4 +1,3 @@
-
 # ==============================================================================
 # Part 1: Configuration
 # ==============================================================================
@@ -42,10 +41,11 @@ def generate_sustainability_breakdown(analysis_json: dict) -> dict:
     Returns:
         A dictionary containing the detailed sustainability breakdown.
     """
+    logger.info(f"Input to generate_sustainability_breakdown: {json.dumps(analysis_json, indent=2)}")
     breakdown = {}
     # The new analysis is nested under the 'sustainability_analysis' key
     sustainability_analysis = analysis_json.get('sustainability_analysis', {})
-    
+    logger.info(f"Extracted sustainability_analysis: {json.dumps(sustainability_analysis, indent=2)}")
     # Iterate through our three main categories
     for category, details in sustainability_analysis.items():
         rating = details.get('rating', 'Unknown')
