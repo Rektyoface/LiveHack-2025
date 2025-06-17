@@ -32,12 +32,10 @@ def get_recommendations(category: str, current_listing_id: str) -> list:
 
     Args:
         category: The category to search within.
-        current_listing_id: The ID of the product being viewed, to exclude it.
-
-    Returns:
+        current_listing_id: The ID of the product being viewed, to exclude it.    Returns:
         A list of up to 3 recommendation dictionaries.
     """
-    if not products_collection or category == "Unknown":
+    if products_collection is None or category == "Unknown":
         return []
 
     try:
@@ -155,11 +153,12 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
             existing_product.get('listing_id')
         )
         existing_product['recommendations'] = recommendations
-        
-        # Clean up the document before sending it back to the API
+          # Clean up the document before sending it back to the API
         # The user doesn't need to see the default score or the internal _id
         if 'default_sustainability_score' in existing_product:
             del existing_product['default_sustainability_score']
+        if '_id' in existing_product:
+            del existing_product['_id']
         
         logger.info("SUCCESS: Process completed (✅ CACHE HIT)")
         logger.info(f"Returning product: {json.dumps(existing_product, indent=2, default=str)}")
@@ -247,11 +246,20 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         )
         response_document['recommendations'] = recommendations
         
-        # Clean up the response document by removing the default score
+        # Clean up the response document by removing fields not needed by frontend
         del response_document['default_sustainability_score']
-        
+        # Remove _id as it's not JSON serializable and not needed by frontend
+        if '_id' in response_document:
+            del response_document['_id']
         logger.info("SUCCESS: Process completed ❌(CACHE MISS)")
-        logger.info(f"Returning product: {json.dumps(response_document, indent=2, default=str)}")
+        # Safe logging with proper serialization
+        try:
+            # Create a copy for logging without the ObjectId
+            log_document = {k: v for k, v in response_document.items() if k != '_id'}
+            logger.info(f"Returning product: {json.dumps(log_document, indent=2, default=str)}")
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Could not serialize response_document for logging: {e}")
+            logger.info(f"Response document keys: {list(response_document.keys())}")
         return response_document
     
     except Exception as e:
@@ -273,10 +281,18 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
                 )
                 # Prepare response document
                 existing_doc['sustainability_score'] = personalized_score
-                
-                # Clean up the document before returning
+                  # Clean up the document before returning
                 if 'default_sustainability_score' in existing_doc:
                     del existing_doc['default_sustainability_score']
+                if '_id' in existing_doc:
+                    del existing_doc['_id']
+                
+                # Add recommendations
+                recommendations = get_recommendations(
+                    existing_doc.get('category', 'Unknown'),
+                    existing_doc.get('listing_id')
+                )
+                existing_doc['recommendations'] = recommendations
                 
                 logger.info("SUCCESS: Process completed (DUPLICATE -> CACHE HIT)")
                 logger.info(f"Returning existing product with personalized score: {personalized_score}")
