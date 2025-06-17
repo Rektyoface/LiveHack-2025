@@ -749,7 +749,7 @@ async function updateBadgeForTab(tabId, backendDataOrScore, displayScoreFromCont
           weightedSum += summaryScore;
         });
         
-        score = weightedSum > 0 ? Math.ceil(weightedSum * 10) : undefined;
+        score = weightedSum > 0 ? Math.round(weightedSum * 10) : undefined;
       }
     }
   }

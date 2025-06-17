@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function () {
         let html = '';        allFields.forEach(field => {
           // Display raw score from field.score, not weighted
           let displayScore = field.score;
-          if (typeof displayScore === 'number' && displayScore > 10) displayScore = Math.ceil(displayScore / 10);
+          if (typeof displayScore === 'number' && displayScore > 10) displayScore = Math.round(displayScore / 10);
           let scoreText = (displayScore === undefined || displayScore === null) ? '--' : displayScore;
           html += `<div class="details-section">
             <h2>${field.title}</h2>
