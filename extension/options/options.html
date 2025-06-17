@@ -16,8 +16,7 @@
     <div class="settings-section">
       <h2>Sustainability Metrics</h2>
       <p class="section-description">Adjust the importance of each environmental factor</p>
-      
-      <div class="setting-item">
+        <div class="setting-item">
         <label for="production-and-brand-weight">Production and Brand</label>
         <div class="weight-container">
           <input type="range" id="production-and-brand-weight" name="production-and-brand-weight" min="1" max="5" value="3">
@@ -26,18 +25,18 @@
       </div>
       
       <div class="setting-item">
-        <label for="material-composition-weight">Material Composition</label>
-        <div class="weight-container">
-          <input type="range" id="material-composition-weight" name="material-composition-weight" min="1" max="5" value="3">
-          <span class="weight-value" id="material-composition-weight-value">3</span>
-        </div>
-      </div>
-      
-      <div class="setting-item">
         <label for="circularity-and-end-of-life-weight">Circularity and End of Life</label>
         <div class="weight-container">
           <input type="range" id="circularity-and-end-of-life-weight" name="circularity-and-end-of-life-weight" min="1" max="5" value="3">
           <span class="weight-value" id="circularity-and-end-of-life-weight-value">3</span>
+        </div>
+      </div>
+      
+      <div class="setting-item">
+        <label for="material-composition-weight">Material Composition</label>
+        <div class="weight-container">
+          <input type="range" id="material-composition-weight" name="material-composition-weight" min="1" max="5" value="3">
+          <span class="weight-value" id="material-composition-weight-value">3</span>
         </div>
       </div>
     </div>
@@ -80,24 +79,8 @@
         <label>
           <input type="checkbox" id="senior-mode" name="senior-mode">
           Enable Senior Mode (Large Font)
-        </label>
-      </div>
+        </label>      </div>
 
-    </div>
-      <div class="settings-section">
-      <h2>Database Connection</h2>
-      <div class="setting-item">
-        <label for="api-endpoint">Backend API Endpoint</label>
-        <input type="text" id="api-endpoint" name="api-endpoint" placeholder="https://api.lxkhome.duckdns.org/api/score">
-        <small>This extension requires a database connection to function.</small>
-      </div>
-      
-      <div class="setting-item checkbox-item">
-        <label>
-          <input type="checkbox" id="data-contribution" name="data-contribution">
-          Contribute anonymous usage data to improve recommendations
-        </label>
-      </div>
     </div>
     
     <div class="button-row">

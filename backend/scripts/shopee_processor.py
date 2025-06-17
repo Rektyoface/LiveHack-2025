@@ -33,37 +33,48 @@ def get_recommendations(category: str, current_listing_id: str) -> list:
     Args:
         category: The category to search within.
         current_listing_id: The ID of the product being viewed, to exclude it.    Returns:
-        A list of up to 3 recommendation dictionaries.
+        A list of up to 3 recommendation dictionaries with 'url' and 'score'.
     """
-    if products_collection is None or category == "Unknown":
+    if not products_collection or category == "Unknown":
+        logger.warning("Cannot get recommendations, database not connected or category is Unknown.")
         return []
 
     try:
-        # Define the query pipeline
-        query_filter = {
-            "category": category,
-            # Exclude the current product from its own recommendations
-            "listing_id": {"$ne": current_listing_id} 
-        }
-
-        # Define the projection to only get the fields we need
-        projection = {
-            "product_name": 1,
-            "brand": 1,
-            "source_url": 1,
-            "default_sustainability_score": 1,
-            "_id": 0
-        }
-
-        # Find the top 3 products by sorting by the default score descending
-        recommendations_cursor = products_collection.find(query_filter, projection).sort(
-            "default_sustainability_score", -1
-        ).limit(3)
-
-        return list(recommendations_cursor)
+        # Define the aggregation pipeline to find, sort, limit, and project fields
+        pipeline = [
+            {
+                '$match': {
+                    'category': category,
+                    'listing_id': {'$ne': current_listing_id}
+                }
+            },
+            {
+                '$sort': {'default_sustainability_score': -1}
+            },
+            {
+                '$limit': 3
+            },
+            {
+                '$project': {
+                    'product_name': 1,
+                    'brand': 1,
+                    'url': '$source_url',  # Rename 'source_url' to 'url' for the frontend
+                    'score': '$default_sustainability_score', # Rename for consistency
+                    '_id': 0
+                }
+            }
+        ]
+        
+        recommendations = list(products_collection.aggregate(pipeline))
+        logger.info(f"Found {len(recommendations)} recommendations for category '{category}'.")
+        # Log the actual recommendations found
+        if recommendations:
+            # Use default=str for any non-serializable fields like ObjectId
+            logger.info(f"Recommendations: {json.dumps(recommendations, indent=2, default=str)}")
+        return recommendations
 
     except Exception as e:
-        print(f"Error fetching recommendations: {e}")
+        logger.error(f"Error fetching recommendations: {e}", exc_info=True)
         return []
 
 # --- The rest of your shopee_processor.py file starts here ---

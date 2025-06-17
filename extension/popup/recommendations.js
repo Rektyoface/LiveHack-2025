@@ -13,8 +13,22 @@ document.addEventListener('DOMContentLoaded', function() {
   const noRecommendations = document.getElementById('no-recommendations');
   const backButton = document.getElementById('back-button');  // Load recommendations from storage
   chrome.storage.local.get(['sustainabilityRecommendations', 'currentProductCategory'], function(result) {
+    console.log('=== RECOMMENDATIONS.JS: DATA FROM STORAGE ===');
+    console.log('Raw storage result:', JSON.stringify(result, null, 2));
     console.log('Loaded recommendations from storage:', result.sustainabilityRecommendations);
     console.log('Current product category:', result.currentProductCategory);
+    
+    if (result.sustainabilityRecommendations) {
+      console.log('=== RECOMMENDATIONS.JS: PROCESSING RECOMMENDATIONS ===');
+      console.log('Number of recommendations:', result.sustainabilityRecommendations.length);
+      result.sustainabilityRecommendations.forEach((rec, index) => {
+        console.log(`Storage Recommendation ${index + 1}:`, JSON.stringify(rec, null, 2));
+        console.log(`  - url field exists:`, 'url' in rec);
+        console.log(`  - score field exists:`, 'score' in rec);
+        console.log(`  - url value:`, rec.url);
+        console.log(`  - score value:`, rec.score);
+      });
+    }
     
     // Update header with category info
     if (result.currentProductCategory && result.currentProductCategory !== 'Unknown') {
@@ -38,13 +52,17 @@ document.addEventListener('DOMContentLoaded', function() {
       categoryElement.innerHTML = `<p style="margin-bottom: 16px; color: var(--color-text-secondary); font-style: italic;">Showing top sustainable products in similar categories</p>`;
       recommendationsContent.appendChild(categoryElement);
     }
-    
-    recommendations.forEach((recommendation, index) => {
+      recommendations.forEach((recommendation, index) => {
       const recommendationElement = document.createElement('div');
       recommendationElement.className = 'recommendation-item';
       
-      const score = recommendation.default_sustainability_score || recommendation.sustainability_score || 0;
+      console.log(`Recommendation ${index}:`, recommendation);
+      console.log(`URL field:`, recommendation.url);
+      console.log(`Score field:`, recommendation.score);
+      
+      const score = recommendation.score || 0; // Use the new 'score' field
       const scoreColor = getScoreColor(score);
+      const productUrl = recommendation.url || '#'; // Fallback to # if no URL
       
       recommendationElement.innerHTML = `
         <div class="recommendation-header">
@@ -59,8 +77,8 @@ document.addEventListener('DOMContentLoaded', function() {
             <strong>Brand:</strong> ${recommendation.brand || 'Unknown'}
           </div>
           <div class="recommendation-url">
-            <a href="${recommendation.source_url}" target="_blank" class="recommendation-link">
-              View Product →
+            <a href="${productUrl}" target="_blank" class="recommendation-link" ${productUrl === '#' ? 'style="opacity: 0.5; pointer-events: none;"' : ''}>
+              ${productUrl === '#' ? 'No URL Available' : 'View Product →'}
             </a>
           </div>
         </div>

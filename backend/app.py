@@ -163,11 +163,20 @@ def extract_and_rate_product():
             'recommendations': processed_result.get('recommendations', []),
             'raw_llm_response': processed_result.get('raw_llm_response', None), # For debugging LLM
             'processing_time_ms': processing_time_ms,
-            'timestamp': datetime.now(timezone.utc).isoformat() + 'Z'
-        }
+            'timestamp': datetime.now(timezone.utc).isoformat() + 'Z'        }
         
         logger.info(f"--- FINAL RESPONSE TO EXTENSION (from shopee_processor) ---")
         logger.info(f"RESPONSE JSON: {json.dumps({'success': True, 'data': final_response_data}, indent=2)}")
+        
+        # Additional detailed logging for recommendations debugging
+        if final_response_data.get('recommendations'):
+            logger.info(f"=== RECOMMENDATIONS DETAILED LOGGING ===")
+            logger.info(f"Number of recommendations: {len(final_response_data['recommendations'])}")
+            for i, rec in enumerate(final_response_data['recommendations']):
+                logger.info(f"Recommendation {i+1}: {json.dumps(rec, indent=2, default=str)}")
+        else:
+            logger.info("=== NO RECOMMENDATIONS IN RESPONSE ===")
+            
         return jsonify({'success': True, 'data': final_response_data})
 
     except Exception as e:

@@ -79,15 +79,36 @@ document.addEventListener('DOMContentLoaded', function() {
       window.location.reload();
     }
   });
-
   // Patch: store last data for refresh
   function handleSustainabilityData(response) {
+    console.log("=== POPUP.JS: RAW RESPONSE FROM BACKEND ===");
+    console.log("Full response object:", JSON.stringify(response, null, 2));
+    
+    if (response && response.data) {
+      console.log("=== POPUP.JS: DATA OBJECT DETAILED ===");
+      console.log("Data keys:", Object.keys(response.data));
+      console.log("Score:", response.data.score);
+      console.log("Recommendations:", response.data.recommendations);
+      console.log("Recommendations length:", response.data.recommendations ? response.data.recommendations.length : 0);
+      
+      if (response.data.recommendations && response.data.recommendations.length > 0) {
+        console.log("=== POPUP.JS: RECOMMENDATIONS DETAILED ===");
+        response.data.recommendations.forEach((rec, index) => {
+          console.log(`Recommendation ${index + 1}:`, JSON.stringify(rec, null, 2));
+          console.log(`  - Has url field:`, 'url' in rec);
+          console.log(`  - Has score field:`, 'score' in rec);
+          console.log(`  - URL value:`, rec.url);
+          console.log(`  - Score value:`, rec.score);
+        });
+      }
+    }
+    
     window._lastEcoShopData = response;
-    console.log("popup.js: Received response in handleSustainabilityData:", response); // Existing log
+    console.log("popup.js: Received response in handleSustainabilityData:", response);
 
     loadingElement.classList.add('hidden');
     if (!response || !response.success) {
-      console.error("popup.js: Response unsuccessful or missing.", response); // Added for debugging
+      console.error("popup.js: Response unsuccessful or missing.", response);
       if (response && response.error) {
         if (response.error.includes("Database connection")) {
           showNoProductMessage("Database connection required. Please check your internet connection and ensure the backend service is running.");
@@ -101,156 +122,151 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const data = response.data;
-    console.log("popup.js: Data object:", data); // Added for debugging
+    console.log("popup.js: Data object:", data);
 
-    productInfoElement.classList.remove('hidden');
-    // Only use score from backend, never use default_sustainability_score
-    let mainScore = typeof data.score === 'number' ? data.score : undefined;
-    let displayScore = mainScore; // Use backend score directly
+    productInfoElement.classList.remove('hidden');    // Use the backend score directly but ensure it matches badge calculation
+    const rawScore = typeof data.score === 'number' ? data.score : undefined;
+    const displayScore = rawScore !== undefined ? Math.ceil(rawScore) : undefined;
+    
+    // Update the main score display
     const scoreColor = getScoreColor(displayScore);
     scoreValueElement.style.color = '#FFF';
     scoreValueElement.parentElement.style.backgroundColor = scoreColor;
     brandNameElement.textContent = data.brand_name || data.brand || "Unknown Brand";
     scoreValueElement.textContent = displayScore !== undefined ? displayScore : "Unknown";
 
+    // Update the browser action badge to match the popup score
+    chrome.runtime.sendMessage({ action: "setBadgeScore", score: displayScore });
+
+    // Render the breakdown details
     sustainabilityMetricsContainer.innerHTML = '';
+    const breakdown = data.sustainability_breakdown || data.breakdown;
+    let detailsData = [];
+    const fieldOrder = [
+      { key: 'production_and_brand', label: 'Production And Brand' },
+      { key: 'circularity_and_end_of_life', label: 'Circularity And End Of Life' },
+      { key: 'material_composition', label: 'Material Composition' }
+    ];
+    
+    if (breakdown) {
+      fieldOrder.forEach(field => {
+        const metricData = breakdown[field.key] || {};
+        const value = metricData.value || metricData.rating;
+        const score = typeof metricData.score === 'number' ? metricData.score : undefined;
 
-    // Get user weights from settings (default to 5 if missing)
-    chrome.storage.sync.get(['settings'], (settingsData) => {
-      const userWeights = settingsData.settings || {};
-      const fieldWeightMap = {
-        production_and_brand: userWeights.production_and_brand || 5,
-        circularity_and_end_of_life: userWeights.circularity_and_end_of_life || 5,
-        material_composition: userWeights.material_composition || 5
-      };
-      // Use 'sustainability_breakdown' if present, else fallback to 'breakdown' (from backend)
-      const breakdown = data.sustainability_breakdown || data.breakdown;
-      let detailsData = [];
-      const fieldOrder = [
-        { key: 'production_and_brand', label: 'Production And Brand' },
-        { key: 'circularity_and_end_of_life', label: 'Circularity And End Of Life' },
-        { key: 'material_composition', label: 'Material Composition' }
-      ];
-      let weightedSum = 0;
-      let totalWeight = 0;
-      if (breakdown) {
-        fieldOrder.forEach(field => {
-          const metricData = breakdown[field.key] || {};
-          let value = metricData.value || metricData.rating || "Unknown";
-          let score = typeof metricData.score === 'number' ? metricData.score : undefined;
-          // Field ratings are fixed, not weighted
-          let displayFieldScore = (typeof score === 'number') ? Math.max(0, Math.min(10, score)) : undefined;
-          if ((value === "Unknown" || !value) && (score === undefined || score === -1 || score === 0)) {
-            value = "We could not find data";
-          }
-          let ratingText = (score === -1) ? '(Rating: Unknown --/10)' : (typeof displayFieldScore === 'number' ? `(Rating: ${displayFieldScore}/10)` : (score === 0 ? '(Rating: 0/10)' : '(Rating: --/10)'));
-          detailsData.push({
-            title: field.label,
-            value,
-            score: displayFieldScore,
-            analysis: metricData.analysis || "We could not find data"
-          });
-          const metricElement = document.createElement('div');
-          metricElement.className = 'metric';
-          metricElement.innerHTML = `
-            <h3>${field.label}</h3>
-            <div class="metric-value">${value} ${ratingText}</div>
-            <div class="meter">
-              <div class="meter-bar" style="width: ${displayFieldScore && displayFieldScore > 0 ? displayFieldScore * 10 : 0}%; background-color: ${getScoreColor(displayFieldScore && displayFieldScore > 0 ? displayFieldScore * 10 : 0)};"></div>
-            </div>
-          `;
-          sustainabilityMetricsContainer.appendChild(metricElement);
-          // For summary score calculation, use the fixed field score, but apply user weights
-          let userWeight = fieldWeightMap[field.key] || 5;
-          let summaryScore = (value === "Unknown" && typeof score === 'number') ? 3 : (typeof score === 'number' ? score * userWeight / 5 : 0);
-          weightedSum += summaryScore;
-          totalWeight += 1;
-        });
-      } else {
-        // Always show the 3 default fields with placeholder values
-        fieldOrder.forEach(field => {
-          detailsData.push({
-            title: field.label,
-            value: "We could not find data",
-            score: undefined,
-            analysis: "We could not find data"
-          });
-          const metricElement = document.createElement('div');
-          metricElement.className = 'metric';
-          metricElement.innerHTML = `
-            <h3>${field.label}</h3>
-            <div class="metric-value">We could not find data (Rating: --/10)</div>
-            <div class="meter">
-              <div class="meter-bar" style="width: 0%; background-color: #ccc;"></div>
-            </div>
-          `;
-          sustainabilityMetricsContainer.appendChild(metricElement);
-        });
-      }
-      // Calculate the main summary score (0-100) using the weighted field scores, always round UP
-      let mainScore = totalWeight > 0 ? Math.ceil((weightedSum / totalWeight) * 10) : undefined;
-      let displayScore = mainScore;
-      // Update the badge to match the popup score
-      chrome.runtime.sendMessage({ action: "setBadgeScore", score: displayScore });
-      const scoreColor = getScoreColor(displayScore);
-      scoreValueElement.style.color = '#FFF';
-      scoreValueElement.parentElement.style.backgroundColor = scoreColor;
-      scoreValueElement.textContent = displayScore !== undefined ? displayScore : "Unknown";      // Show Details button logic
-      const showDetailsButton = document.getElementById('show-details');
-      showDetailsButton.disabled = false;
-      showDetailsButton.onclick = function() {
-        chrome.storage.local.set({ sustainabilityDetails: { allFields: detailsData } }, function() {
-          window.location.href = 'details.html';
-        });
-      }      // Show Recommendations button logic
-      const showRecommendationsButton = document.getElementById('show-recommendations');
-      const recommendations = data.recommendations || [];
-      
-      console.log('Recommendations from backend:', recommendations);
-      
-      if (recommendations.length > 0) {
-        showRecommendationsButton.disabled = false;
-        showRecommendationsButton.textContent = `View Recommendations (${recommendations.length})`;        showRecommendationsButton.onclick = function() {
-          console.log('Storing recommendations:', recommendations);
-          chrome.storage.local.set({ 
-            sustainabilityRecommendations: recommendations,
-            currentProductCategory: data.category || 'Unknown'
-          }, function() {
-            window.location.href = 'recommendations.html';
-          });
+        // Field ratings display the raw score out of 10, not weighted
+        const displayFieldScore = (score !== undefined && score >= 0) ? Math.max(0, Math.min(10, score)) : undefined;
+        const ratingText = (displayFieldScore !== undefined) ? `(Rating: ${displayFieldScore}/10)` : '(Rating: --/10)';
+
+        let valueText;
+        if (value && value !== "Unknown") {
+          valueText = value;
+        } else if (displayFieldScore !== undefined) {
+          valueText = "Unknown";
+        } else {
+          valueText = "We could not find data";
         }
-      } else {
-        showRecommendationsButton.disabled = true;
-        showRecommendationsButton.textContent = 'No Recommendations Available';
-        showRecommendationsButton.style.opacity = '0.6';
-      }
-
-      if (data.certainty) { // Assuming certainty is still part of the response
-        dataCertaintyElement.textContent = capitalizeFirstLetter(data.certainty);
-      }
-      if (data.message) { // Assuming message is still part of the response
-        sustainabilityMessageElement.textContent = data.message;
-      } else {
-        sustainabilityMessageElement.textContent = getDefaultMessage(mainScore);
-      }
-      if (data.alternatives && data.alternatives.length > 0) {
-        alternativesListElement.innerHTML = '';
-        data.alternatives.forEach(alt => {
-          const altElement = document.createElement('div');
-          altElement.className = 'alternative-item';
-          altElement.innerHTML = `
-            <div class="alternative-name">${alt.brand}</div>
-            <div class="alternative-score" style="background-color: ${getScoreColor(alt.score)}">${alt.score}</div>
-          `;
-          altElement.addEventListener('click', () => {
-            window.open(`https://www.google.com/search?q=${encodeURIComponent(alt.brand)}+sustainable+products`, '_blank');
-          });
-          alternativesListElement.appendChild(altElement);
+        
+        detailsData.push({
+          title: field.label,
+          value: valueText,
+          score: displayFieldScore,
+          analysis: metricData.analysis || "We could not find data"
         });
-      } else {
-        document.querySelector('.alternatives-container').classList.add('hidden');
+        
+        const metricElement = document.createElement('div');
+        metricElement.className = 'metric';
+        metricElement.innerHTML = `
+          <h3>${field.label}</h3>
+          <div class="metric-value">${valueText} ${ratingText}</div>
+          <div class="meter">
+            <div class="meter-bar" style="width: ${displayFieldScore ? displayFieldScore * 10 : 0}%; background-color: ${getScoreColor(displayFieldScore ? displayFieldScore * 10 : 0)};"></div>
+          </div>
+        `;
+        sustainabilityMetricsContainer.appendChild(metricElement);
+      });
+    } else {
+      // Always show the 3 default fields with placeholder values
+      fieldOrder.forEach(field => {
+        detailsData.push({
+          title: field.label,
+          value: "We could not find data",
+          score: undefined,
+          analysis: "We could not find data"
+        });
+        const metricElement = document.createElement('div');
+        metricElement.className = 'metric';
+        metricElement.innerHTML = `
+          <h3>${field.label}</h3>
+          <div class="metric-value">We could not find data (Rating: --/10)</div>
+          <div class="meter">
+            <div class="meter-bar" style="width: 0%; background-color: #ccc;"></div>
+          </div>
+        `;
+        sustainabilityMetricsContainer.appendChild(metricElement);
+      });
+    }
+    
+    // Show Details button logic
+    const showDetailsButton = document.getElementById('show-details');
+    showDetailsButton.disabled = false;
+    showDetailsButton.onclick = function() {
+      chrome.storage.local.set({ sustainabilityDetails: { allFields: detailsData } }, function() {
+        window.location.href = 'details.html';
+      });
+    }
+
+    // Show Recommendations button logic
+    const showRecommendationsButton = document.getElementById('show-recommendations');
+    const recommendations = data.recommendations || [];
+    
+    console.log('Recommendations from backend:', recommendations);
+    
+    if (recommendations.length > 0) {
+      showRecommendationsButton.disabled = false;
+      showRecommendationsButton.textContent = `View Recommendations (${recommendations.length})`;
+      showRecommendationsButton.onclick = function() {
+        console.log('Storing recommendations:', recommendations);
+        chrome.storage.local.set({ 
+          sustainabilityRecommendations: recommendations,
+          currentProductCategory: data.category || 'Unknown'
+        }, function() {
+          window.location.href = 'recommendations.html';
+        });
       }
-    });
+    } else {
+      showRecommendationsButton.disabled = true;
+      showRecommendationsButton.textContent = 'No Recommendations Available';
+      showRecommendationsButton.style.opacity = '0.6';
+    }
+
+    if (data.certainty) {
+      dataCertaintyElement.textContent = capitalizeFirstLetter(data.certainty);
+    }
+    
+    if (data.message) {
+      sustainabilityMessageElement.textContent = data.message;
+    } else {
+      sustainabilityMessageElement.textContent = getDefaultMessage(displayScore);
+    }
+
+    if (data.alternatives && data.alternatives.length > 0) {
+      alternativesListElement.innerHTML = '';
+      data.alternatives.forEach(alt => {
+        const altElement = document.createElement('div');
+        altElement.className = 'alternative-item';
+        altElement.innerHTML = `
+          <div class="alternative-name">${alt.brand}</div>
+          <div class="alternative-score" style="background-color: ${getScoreColor(alt.score)}">${alt.score}</div>
+        `;
+        altElement.addEventListener('click', () => {
+          window.open(`https://www.google.com/search?q=${encodeURIComponent(alt.brand)}+sustainable+products`, '_blank');
+        });
+        alternativesListElement.appendChild(altElement);
+      });
+    } else {
+      document.querySelector('.alternatives-container').classList.add('hidden');
+    }
   }
 
   function showNoProductMessage(message = "Please visit a product page to see sustainability information") {
@@ -262,9 +278,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function getScoreColor(score) {
     if (score === null || score === undefined || isNaN(score)) return '#ccc'; // Default for N/A
-    if (score >= 70) return '#4CAF50'; // Green
-    if (score >= 40) return '#FFC107'; // Yellow/Amber
-    return '#F44336'; // Red
+    if (score >= 70) return '#4caf50'; // Green
+    if (score >= 40) return '#ff9800'; // Orange
+    return '#f44336'; // Red
   }
 
   function capitalizeFirstLetter(string) {
@@ -272,18 +288,15 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function getDefaultMessage(score) {
-    if (score === null || score === undefined || isNaN(score)) return "Sustainability information is not available.";
-    if (score >= 70) return "This product demonstrates strong sustainability practices.";
+    if (score === undefined || score === null) return "We could not find any sustainability information for this product.";
+    if (score >= 70) return "This product has good sustainability practices.";
     if (score >= 40) return "This product has average sustainability practices.";
-    return "This product has areas for improvement in sustainability.";
+    return "This product has poor sustainability practices.";
   }
-
-  optionsButton.addEventListener('click', function() {
+  optionsButton.addEventListener('click', () => {
     chrome.runtime.openOptionsPage();
   });
 
-  learnMoreButton.addEventListener('click', function() {
-    // Replace with your actual learn more link
-    window.open('https://example.com/learn-more-sustainability', '_blank');
-  });
+  // Learn More button - remove the incorrect details navigation
+  // The "Show Details" button handles navigation to details page
 });

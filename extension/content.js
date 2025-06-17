@@ -714,8 +714,7 @@
       }
     });
   }
-  
-  // Get user preference for badge position and dark mode
+    // Get user preference for badge position and dark mode
   async function getUserPreferences() {
     return new Promise(resolve => {
       chrome.storage.sync.get(
@@ -723,32 +722,74 @@
           darkMode: true,
           settings: {
             badgePosition: 'bottom-right',
-            seniorMode: false
+            seniorMode: false,
+            showBadge: true
           }
         },
         (result) => resolve({
           darkMode: result.darkMode,
           badgePosition: result.settings?.badgePosition || 'bottom-right',
-          seniorMode: result.settings?.seniorMode ?? false  // 🔐 safe access
+          seniorMode: result.settings?.seniorMode ?? false,
+          showBadge: result.settings?.showBadge ?? true
         })
       );
     });
   }
 
-  
   // Display a sustainability badge on the page
   async function displaySustainabilityBadge(sustainabilityData) {
-    // Check if there's already a badge
-    let badge = document.getElementById('ecoshop-sustainability-badge');
-    if (badge) {
-      document.body.removeChild(badge);
-    }
-    
     // Get user preferences
     const preferences = await getUserPreferences();
     const darkMode = preferences.darkMode;
     const seniorMode = preferences.seniorMode;
     
+    // Calculate the weighted/averaged score and round up after division, matching popup logic
+    let displayScore = sustainabilityData.score;
+    if (sustainabilityData.sustainability_breakdown || sustainabilityData.breakdown) {
+      const breakdown = sustainabilityData.sustainability_breakdown || sustainabilityData.breakdown;
+      const fieldOrder = [
+        'production_and_brand',
+        'circularity_and_end_of_life',
+        'material_composition'
+      ];
+      let weightedSum = 0;
+      let totalWeight = 0;
+      // Use user weights if available, else default to 5
+      let userWeights = { production_and_brand: 5, circularity_and_end_of_life: 5, material_composition: 5 };
+      try {
+        const settings = await new Promise(resolve => {
+          chrome.storage.sync.get(['settings'], (result) => resolve(result.settings || {}));
+        });
+        userWeights = {
+          production_and_brand: settings.production_and_brand || 5,
+          circularity_and_end_of_life: settings.circularity_and_end_of_life || 5,
+          material_composition: settings.material_composition || 5
+        };
+      } catch (e) {}
+      // Calculate total weight first
+      fieldOrder.forEach(key => {
+        totalWeight += userWeights[key] || 5;
+      });
+      fieldOrder.forEach(key => {
+        const metricData = breakdown[key] || {};
+        let fieldScore = typeof metricData.score === 'number' ? metricData.score : undefined;
+        let summaryScore = (typeof fieldScore === 'number') ? fieldScore * userWeights[key] / totalWeight : 0;
+        weightedSum += summaryScore;
+      });
+      displayScore = weightedSum > 0 ? Math.ceil(weightedSum * 10) : undefined;
+    }
+    // Always update the browser action badge, regardless of showBadge setting
+    chrome.runtime.sendMessage({ action: "setBadgeScoreFromContent", displayScore });
+    // If showBadge is disabled, don't show the floating badge but still set browser action badge
+    if (!preferences.showBadge) {
+      console.log("EcoShop: Floating badge disabled by user preference, but browser action badge updated");
+      return;
+    }
+    // Check if there's already a floating badge
+    let badge = document.getElementById('ecoshop-sustainability-badge');
+    if (badge) {
+      document.body.removeChild(badge);
+    }
     // Create floating badge
     badge = document.createElement('div');
     badge.id = 'ecoshop-sustainability-badge';    
@@ -794,39 +835,6 @@
     `;
 
 
-    // Calculate the weighted/averaged score and round up after division, matching popup logic
-    let displayScore = sustainabilityData.score;
-    if (sustainabilityData.sustainability_breakdown || sustainabilityData.breakdown) {
-      const breakdown = sustainabilityData.sustainability_breakdown || sustainabilityData.breakdown;
-      const fieldOrder = [
-        'production_and_brand',
-        'circularity_and_end_of_life',
-        'material_composition'
-      ];
-      let weightedSum = 0;
-      let totalWeight = 0;
-      // Use user weights if available, else default to 5
-      let userWeights = { production_and_brand: 5, circularity_and_end_of_life: 5, material_composition: 5 };
-      try {
-        const settings = await new Promise(resolve => {
-          chrome.storage.sync.get(['settings'], (result) => resolve(result.settings || {}));
-        });
-        userWeights = {
-          production_and_brand: settings.production_and_brand || 5,
-          circularity_and_end_of_life: settings.circularity_and_end_of_life || 5,
-          material_composition: settings.material_composition || 5
-        };
-      } catch (e) {}
-      fieldOrder.forEach(key => {
-        const metricData = breakdown[key] || {};
-        let value = metricData.value || metricData.rating || "Unknown";
-        let fieldScore = typeof metricData.score === 'number' ? metricData.score : undefined;
-        let summaryScore = (value === "Unknown" && typeof fieldScore === 'number') ? 3 : (typeof fieldScore === 'number' ? fieldScore * userWeights[key] / 5 : 0);
-        weightedSum += summaryScore;
-        totalWeight += 1;
-      });
-      displayScore = totalWeight > 0 ? Math.ceil((weightedSum / totalWeight) * 10) : undefined;
-    }
     badge.innerHTML = `
       <h3 style="margin: 0 0 0.625rem 0; font-size: ${titleSize}; color: ${darkMode ? '#fff' : '#333'};">
         Sustainability Score
@@ -839,13 +847,10 @@
       </p>
       <div style="margin-top: 0.5rem; font-size: ${subtitleSize}; color: ${darkMode ? '#ccc' : '#666'};">
         Or click the extension icon in the toolbar
-      </div>
-    `;
+      </div>    `;
     badge.style.opacity = '0';
     document.body.appendChild(badge);
     setTimeout(() => { badge.style.transition = 'opacity 0.5s'; badge.style.opacity = '1'; }, 10);
-    // Update the browser action badge to match
-    chrome.runtime.sendMessage({ action: "setBadgeScoreFromContent", displayScore });
 
     // Disconnect the observer so the badge doesn't reappear after removal
     if (window.ecoshopObserver && typeof window.ecoshopObserver.disconnect === 'function') {
@@ -931,7 +936,7 @@
   function getColorForScore(score) {
     if (score >= 70) return '4CAF50'; // Green
     if (score >= 40) return 'FFC107'; // Yellow/Amber
-    return 'F44336'; // Red
+    return 'F44336'; // Red  
   }
   
   // Handle messages from background script or popup
@@ -942,7 +947,8 @@
     }
     return true;
   });
-    // Wait for the page to fully load
+  
+  // Wait for the page to fully load
   window.addEventListener('load', () => {
     // First attempt to extract product info
     setTimeout(() => {
@@ -1024,7 +1030,6 @@
     });
     console.log("EcoShop: Observer started");
   }, 2000);
-
   // Listen for fade out badge message
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "fadeEcoShopBadge") {
@@ -1036,11 +1041,14 @@
           if (badge.parentNode) badge.parentNode.removeChild(badge);
           // After fade out, re-evaluate if badge should be shown again
           // Only show badge if on a product page and settings allow
-          setTimeout(() => {
-            const productInfo = extractProductInfo && extractProductInfo();
+          setTimeout(async () => {
+            const productInfo = extractProductInfo();
             if (productInfo && (productInfo.brand || productInfo.name)) {
-              // Optionally, check settings here if you want to respect badge visibility
-              sendToServiceWorker(productInfo);
+              // Check if badge should be shown based on user settings
+              const preferences = await getUserPreferences();
+              if (preferences.showBadge) {
+                sendToServiceWorker(productInfo);
+              }
             }
           }, 100); // Short delay to allow DOM update
         }, 500);
