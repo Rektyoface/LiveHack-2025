@@ -144,7 +144,7 @@ def extract_and_rate_product():
                 'error': 'Product analysis by shopee_processor failed.'
             }), 500
         
-        processing_time_ms = (datetime.now(timezone.UTC) - start_time).total_seconds() * 1000
+        processing_time_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
         
         # 5. Prepare and send response
         # The structure of 'result' should match what the extension expects
@@ -158,7 +158,7 @@ def extract_and_rate_product():
             'breakdown': processed_result.get('sustainability_breakdown', {}),
             'raw_llm_response': processed_result.get('raw_llm_response', None), # For debugging LLM
             'processing_time_ms': processing_time_ms,
-            'timestamp': datetime.now(timezone.UTC).isoformat() + 'Z'
+            'timestamp': datetime.now(timezone.utc).isoformat() + 'Z'
         }
         
         logger.info(f"--- FINAL RESPONSE TO EXTENSION (from shopee_processor) ---")
