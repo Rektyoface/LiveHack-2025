@@ -25,6 +25,52 @@ from scripts.analyzer import get_full_product_analysis
 from scripts.scorer import generate_sustainability_breakdown, calculate_weighted_score
 
 
+def get_recommendations(category: str, current_listing_id: str) -> list:
+    """
+    Queries the database to find the top 3 most sustainable products
+    in the same category, excluding the current product.
+
+    Args:
+        category: The category to search within.
+        current_listing_id: The ID of the product being viewed, to exclude it.
+
+    Returns:
+        A list of up to 3 recommendation dictionaries.
+    """
+    if not products_collection or category == "Unknown":
+        return []
+
+    try:
+        # Define the query pipeline
+        query_filter = {
+            "category": category,
+            # Exclude the current product from its own recommendations
+            "listing_id": {"$ne": current_listing_id} 
+        }
+
+        # Define the projection to only get the fields we need
+        projection = {
+            "product_name": 1,
+            "brand": 1,
+            "source_url": 1,
+            "default_sustainability_score": 1,
+            "_id": 0
+        }
+
+        # Find the top 3 products by sorting by the default score descending
+        recommendations_cursor = products_collection.find(query_filter, projection).sort(
+            "default_sustainability_score", -1
+        ).limit(3)
+
+        return list(recommendations_cursor)
+
+    except Exception as e:
+        print(f"Error fetching recommendations: {e}")
+        return []
+
+# --- The rest of your shopee_processor.py file starts here ---
+# def process_shopee_product(...)
+
 # --- Step 2: Define the main processing function ---
 
 def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = None) -> dict | None:
@@ -103,13 +149,19 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         
         # Update the score in the document we are about to return to the user
         existing_product['sustainability_score'] = personalized_score
+
+        recommendations = get_recommendations(
+            existing_product.get('category', 'Unknown'),
+            existing_product.get('listing_id')
+        )
+        existing_product['recommendations'] = recommendations
         
         # Clean up the document before sending it back to the API
         # The user doesn't need to see the default score or the internal _id
         if 'default_sustainability_score' in existing_product:
             del existing_product['default_sustainability_score']
         
-        logger.info("SUCCESS: Process completed (CACHE HIT)")
+        logger.info("SUCCESS: Process completed (✅ CACHE HIT)")
         logger.info(f"Returning product: {json.dumps(existing_product, indent=2, default=str)}")
         return existing_product
 
@@ -188,11 +240,17 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         personalized_score = calculate_weighted_score(sustainability_breakdown)
         response_document['sustainability_score'] = personalized_score
         logger.info(f"Personalized score: {personalized_score}")
+
+        recommendations = get_recommendations(
+            response_document.get('category', 'Unknown'),
+            response_document.get('listing_id')
+        )
+        response_document['recommendations'] = recommendations
         
         # Clean up the response document by removing the default score
         del response_document['default_sustainability_score']
         
-        logger.info("SUCCESS: Process completed (CACHE MISS)")
+        logger.info("SUCCESS: Process completed ❌(CACHE MISS)")
         logger.info(f"Returning product: {json.dumps(response_document, indent=2, default=str)}")
         return response_document
     
