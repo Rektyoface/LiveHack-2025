@@ -48,7 +48,7 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         personalized score, or None if the process fails at any step.
     """
     # --- Guard Clause: Ensure database is connected ---
-    if not products_collection:
+    if products_collection is None:
         print("Error: Database is not connected. Cannot process URL.")
         return None
 
@@ -114,20 +114,22 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
     # 4e. Save the new document to the database
     try:
         result = products_collection.insert_one(product_document)
-        # Add the new MongoDB _id to our local document object
-        product_document['_id'] = result.inserted_id
+        # Create a new dictionary for the response to the user.
+        # This avoids modifying the original document we want to test.
+        response_document = product_document.copy()
         
-        # 4f. Prepare the final document to be returned to the user
-        # Calculate the score based on their specific weights
+        # Add the new _id from the database result
+        response_document['_id'] = result.inserted_id
+        
+        # Calculate the personalized score for the user
         personalized_score = calculate_weighted_score(sustainability_breakdown, user_weights)
-        product_document['sustainability_score'] = personalized_score
+        response_document['sustainability_score'] = personalized_score
         
-        # Clean up the document for the final response
-        del product_document['default_sustainability_score']
+        # Clean up the response document by removing the default score
+        del response_document['default_sustainability_score']
         
-        print(f"✔️ New product saved to database with _id: {result.inserted_id}")
-        return product_document
+        return response_document
+    
     except Exception as e:
-        # This can happen if two requests for the same new product arrive at the same time
-        print(f"Error: Could not insert document into MongoDB. It might be a duplicate race condition. {e}")
+        print(f"Error: Could not insert document into MongoDB. {e}")
         return None

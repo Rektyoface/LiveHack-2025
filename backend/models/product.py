@@ -2,23 +2,21 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Product:
-    productID: int
-    brandID: int
-    ecoScore: int
-    additionalInfo: str
-    listingID: int = field(init=False)  # prevent manual setting
-    sourceSite: str
-
-    def __post_init__(self):
-        # Automatically set itemIdentifier as concatenation of brandID and productID
-        self.listingID = int(f"{self.brandID}{self.productID}")
+    default_sustainability_score: int
+    brand_name: str
+    product_name: str
+    sustainability_breakdown: str
+    listing_id: int 
+    source_site: str
+    category: str
 
     def to_dict(self):
         return {
-            "productID": self.productID,
-            "brandID": self.brandID,
-            "itemIdentifier": self.listingID, 
-            "ecoScore": self.ecoScore,
-            "additionalInfo": self.additionalInfo,
-            "sourceSite": self.sourceSite
+            "default_sustainability_score": self.default_sustainability_score,
+            "brand_name": self.brand_name,
+            "product_name": self.product_name,
+            "sustainability_breakdown": self.sustainability_breakdown,
+            "listing_id": self.listing_id,
+            "sourceSite": self.source_site,
+            "category": self.category
         }
