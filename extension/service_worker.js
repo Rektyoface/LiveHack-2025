@@ -683,18 +683,22 @@ async function updateBadgeForTab(tabId, backendDataOrScore, displayScoreFromCont
           'production_and_brand',
           'circularity_and_end_of_life',
           'material_composition'
-        ];
-        let weightedSum = 0;
+        ];        let weightedSum = 0;
         let totalWeight = 0;
+        
+        // Calculate total weight first
         fieldOrder.forEach(key => {
+          totalWeight += fieldWeightMap[key] || 5;
+        });
+          fieldOrder.forEach(key => {
           const metricData = breakdown[key] || {};
           let value = metricData.value || metricData.rating || "Unknown";
           let fieldScore = typeof metricData.score === 'number' ? metricData.score : undefined;
-          let summaryScore = (value === "Unknown" && typeof fieldScore === 'number') ? 3 : (typeof fieldScore === 'number' ? fieldScore * fieldWeightMap[key] / 5 : 0);
+          let summaryScore = (typeof fieldScore === 'number') ? fieldScore * fieldWeightMap[key] / totalWeight : 0;
           weightedSum += summaryScore;
-          totalWeight += 1;
         });
-        score = totalWeight > 0 ? Math.ceil((weightedSum / totalWeight) * 10) : undefined;
+        
+        score = weightedSum > 0 ? Math.ceil(weightedSum * 10) : undefined;
       }
     }
   }

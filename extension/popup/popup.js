@@ -124,8 +124,7 @@ document.addEventListener('DOMContentLoaded', function() {
         material_composition: userWeights.material_composition || 5
       };
       // Use 'sustainability_breakdown' if present, else fallback to 'breakdown' (from backend)
-      const breakdown = data.sustainability_breakdown || data.breakdown;
-      let detailsData = [];
+      const breakdown = data.sustainability_breakdown || data.breakdown;      let detailsData = [];
       const fieldOrder = [
         { key: 'production_and_brand', label: 'Production And Brand' },
         { key: 'circularity_and_end_of_life', label: 'Circularity And End Of Life' },
@@ -133,38 +132,57 @@ document.addEventListener('DOMContentLoaded', function() {
       ];
       let weightedSum = 0;
       let totalWeight = 0;
+      
+      // Calculate total weight first
+      fieldOrder.forEach(field => {
+        totalWeight += fieldWeightMap[field.key] || 5;
+      });
+      
       if (breakdown) {
         fieldOrder.forEach(field => {
           const metricData = breakdown[field.key] || {};
-          let value = metricData.value || metricData.rating || "Unknown";
-          let score = typeof metricData.score === 'number' ? metricData.score : undefined;
-          // Field ratings are fixed, not weighted
-          let displayFieldScore = (typeof score === 'number') ? Math.max(0, Math.min(10, score)) : undefined;
-          if ((value === "Unknown" || !value) && (score === undefined || score === -1 || score === 0)) {
-            value = "We could not find data";
+          const value = metricData.value || metricData.rating;
+          const score = typeof metricData.score === 'number' ? metricData.score : undefined;
+
+          // Field ratings display the raw score out of 10, not weighted
+          const displayFieldScore = (score !== undefined && score >= 0) ? Math.max(0, Math.min(10, score)) : undefined;
+
+          // Determine the rating text, e.g., "(Rating: 3/10)"
+          const ratingText = (displayFieldScore !== undefined) ? `(Rating: ${displayFieldScore}/10)` : '(Rating: --/10)';
+
+          // Determine the value text to display.
+          let valueText;
+          if (value && value !== "Unknown") {
+            valueText = value; // Use the value if it's specific (e.g., "Good", "Poor").
+          } else if (displayFieldScore !== undefined) {
+            valueText = "Unknown"; // If value is "Unknown" or missing but we have a score, display "Unknown".
+          } else {
+            valueText = "We could not find data"; // If both value and score are missing.
           }
-          let ratingText = (score === -1) ? '(Rating: Unknown --/10)' : (typeof displayFieldScore === 'number' ? `(Rating: ${displayFieldScore}/10)` : (score === 0 ? '(Rating: 0/10)' : '(Rating: --/10)'));
+          
           detailsData.push({
             title: field.label,
-            value,
+            value: valueText,
             score: displayFieldScore,
             analysis: metricData.analysis || "We could not find data"
           });
+          
           const metricElement = document.createElement('div');
           metricElement.className = 'metric';
           metricElement.innerHTML = `
             <h3>${field.label}</h3>
-            <div class="metric-value">${value} ${ratingText}</div>
+            <div class="metric-value">${valueText} ${ratingText}</div>
             <div class="meter">
-              <div class="meter-bar" style="width: ${displayFieldScore && displayFieldScore > 0 ? displayFieldScore * 10 : 0}%; background-color: ${getScoreColor(displayFieldScore && displayFieldScore > 0 ? displayFieldScore * 10 : 0)};"></div>
+              <div class="meter-bar" style="width: ${displayFieldScore ? displayFieldScore * 10 : 0}%; background-color: ${getScoreColor(displayFieldScore ? displayFieldScore * 10 : 0)};"></div>
             </div>
           `;
           sustainabilityMetricsContainer.appendChild(metricElement);
-          // For summary score calculation, use the fixed field score, but apply user weights
-          let userWeight = fieldWeightMap[field.key] || 5;
-          let summaryScore = (value === "Unknown" && typeof score === 'number') ? 3 : (typeof score === 'number' ? score * userWeight / 5 : 0);
+
+          // For summary score calculation, use the weighted field score. Treat scores < 0 as 0.
+          const calculationScore = (score !== undefined && score >= 0) ? score : 0;
+          const userWeight = fieldWeightMap[field.key] || 5;
+          const summaryScore = calculationScore * userWeight / totalWeight;
           weightedSum += summaryScore;
-          totalWeight += 1;
         });
       } else {
         // Always show the 3 default fields with placeholder values
@@ -187,8 +205,9 @@ document.addEventListener('DOMContentLoaded', function() {
           sustainabilityMetricsContainer.appendChild(metricElement);
         });
       }
+      
       // Calculate the main summary score (0-100) using the weighted field scores, always round UP
-      let mainScore = totalWeight > 0 ? Math.ceil((weightedSum / totalWeight) * 10) : undefined;
+      let mainScore = weightedSum > 0 ? Math.ceil(weightedSum * 10) : undefined;
       let displayScore = mainScore;
       // Update the badge to match the popup score
       chrome.runtime.sendMessage({ action: "setBadgeScore", score: displayScore });
@@ -243,9 +262,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function getScoreColor(score) {
     if (score === null || score === undefined || isNaN(score)) return '#ccc'; // Default for N/A
-    if (score >= 70) return '#4CAF50'; // Green
-    if (score >= 40) return '#FFC107'; // Yellow/Amber
-    return '#F44336'; // Red
+    if (score >= 70) return '#4caf50'; // Green
+    if (score >= 40) return '#ff9800'; // Orange
+    return '#f44336'; // Red
   }
 
   function capitalizeFirstLetter(string) {
@@ -253,18 +272,9 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function getDefaultMessage(score) {
-    if (score === null || score === undefined || isNaN(score)) return "Sustainability information is not available.";
-    if (score >= 70) return "This product demonstrates strong sustainability practices.";
+    if (score === undefined || score === null) return "We could not find any sustainability information for this product.";
+    if (score >= 70) return "This product has good sustainability practices.";
     if (score >= 40) return "This product has average sustainability practices.";
-    return "This product has areas for improvement in sustainability.";
+    return "This product has poor sustainability practices.";
   }
-
-  optionsButton.addEventListener('click', function() {
-    chrome.runtime.openOptionsPage();
-  });
-
-  learnMoreButton.addEventListener('click', function() {
-    // Replace with your actual learn more link
-    window.open('https://example.com/learn-more-sustainability', '_blank');
-  });
 });

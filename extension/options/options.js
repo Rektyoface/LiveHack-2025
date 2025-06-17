@@ -8,18 +8,14 @@ document.addEventListener('DOMContentLoaded', function() {
   const productionAndBrandWeightValue = document.getElementById('production-and-brand-weight-value');
   const materialCompositionWeightValue = document.getElementById('material-composition-weight-value');
   const circularityAndEndOfLifeWeightValue = document.getElementById('circularity-and-end-of-life-weight-value');
-
   const showBadgeCheckbox = document.getElementById('show-badge');
   const showAlternativesCheckbox = document.getElementById('show-alternatives');
   const badgePositionSelect = document.getElementById('badge-position');
   const darkModeCheckbox = document.getElementById('dark-mode');
-  const apiEndpointInput = document.getElementById('api-endpoint');
-  const dataContributionCheckbox = document.getElementById('data-contribution');
 
   const restoreDefaultsButton = document.getElementById('restore-defaults');
   const saveSettingsButton = document.getElementById('save-settings');
-  const statusMessage = document.getElementById('status-message');
-  // Default settings
+  const statusMessage = document.getElementById('status-message');  // Default settings
   const defaultSettings = {
     carbonWeight: 3,
     waterWeight: 3,
@@ -29,9 +25,7 @@ document.addEventListener('DOMContentLoaded', function() {
     seniorMode: false,
     showAlternatives: true,
     badgePosition: 'bottom-right',
-    darkMode: true,
-    apiEndpoint: 'https://api.lxkhome.duckdns.org/api/score',
-    dataContribution: false
+    darkMode: true
   };
 
   // Initialize theme from storage
@@ -96,8 +90,6 @@ document.addEventListener('DOMContentLoaded', function() {
       showAlternatives: showAlternativesCheckbox.checked,
       badgePosition: badgePositionSelect.value,
       darkMode: darkModeCheckbox.checked,
-      apiEndpoint: apiEndpointInput.value.trim(),
-      dataContribution: dataContributionCheckbox.checked,
       seniorMode: document.getElementById('senior-mode').checked
     };
 
@@ -146,14 +138,10 @@ document.addEventListener('DOMContentLoaded', function() {
       materialCompositionWeightValue.textContent = settings.material_composition || 3;
 
       circularityAndEndOfLifeWeightInput.value = settings.circularity_and_end_of_life || 3;
-      circularityAndEndOfLifeWeightValue.textContent = settings.circularity_and_end_of_life || 3;
-
-      showBadgeCheckbox.checked = settings.showBadge;
+      circularityAndEndOfLifeWeightValue.textContent = settings.circularity_and_end_of_life || 3;      showBadgeCheckbox.checked = settings.showBadge;
       showAlternativesCheckbox.checked = settings.showAlternatives;
       badgePositionSelect.value = settings.badgePosition;
       darkModeCheckbox.checked = darkMode;
-      apiEndpointInput.value = settings.apiEndpoint || '';
-      dataContributionCheckbox.checked = settings.dataContribution;
       document.getElementById('senior-mode').checked = settings.seniorMode;
       applySeniorMode(settings.seniorMode);
 
@@ -172,14 +160,10 @@ document.addEventListener('DOMContentLoaded', function() {
     materialCompositionWeightValue.textContent = defaultSettings.material_composition || 3;
 
     circularityAndEndOfLifeWeightInput.value = defaultSettings.circularity_and_end_of_life || 3;
-    circularityAndEndOfLifeWeightValue.textContent = defaultSettings.circularity_and_end_of_life || 3;
-
-    showBadgeCheckbox.checked = defaultSettings.showBadge;
+    circularityAndEndOfLifeWeightValue.textContent = defaultSettings.circularity_and_end_of_life || 3;    showBadgeCheckbox.checked = defaultSettings.showBadge;
     showAlternativesCheckbox.checked = defaultSettings.showAlternatives;
     badgePositionSelect.value = defaultSettings.badgePosition;
     darkModeCheckbox.checked = defaultSettings.darkMode;
-    apiEndpointInput.value = defaultSettings.apiEndpoint;
-    dataContributionCheckbox.checked = defaultSettings.dataContribution;
 
     applySeniorMode(defaultSettings.seniorMode);
 
@@ -187,14 +171,27 @@ document.addEventListener('DOMContentLoaded', function() {
 
     showStatus('Default settings restored. Click Save to apply.', 'success');
   }
-
-  // Display status message
+  // Display status message with improved fading
   function showStatus(message, type) {
+    // Clear any existing timeout
+    if (window.statusTimeout) {
+      clearTimeout(window.statusTimeout);
+    }
+    
+    // Reset message state
     statusMessage.textContent = message;
-    statusMessage.className = 'status-message ' + type;
-
-    // Clear the message after a few seconds
+    statusMessage.className = 'status-message';
+    
+    // Force reflow to ensure the reset is applied
+    statusMessage.offsetHeight;
+    
+    // Apply the success/error class to trigger the fade-in
     setTimeout(() => {
+      statusMessage.className = 'status-message ' + type;
+    }, 50);
+
+    // Set timeout to fade out after 3 seconds
+    window.statusTimeout = setTimeout(() => {
       statusMessage.className = 'status-message';
     }, 3000);
   }
