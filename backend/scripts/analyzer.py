@@ -1,4 +1,4 @@
-# scripts/analyzer.py (Advanced: Using the correct gemini-1.5-flash-latest model)
+# scripts/analyzer.py (With Dynamic Category Extraction)
 
 import json
 import google.generativeai as genai
@@ -15,10 +15,11 @@ logger = logging.getLogger('analyzer')
 try:
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sys.path.insert(0, project_root)
-    from config import GOOGLE_API_KEY, APP_CATEGORIES
+    # --- CHANGE HERE: We no longer need to import APP_CATEGORIES ---
+    from config import GOOGLE_API_KEY
     logger.info("Successfully imported config variables.")
 except ImportError:
-    logger.critical("CRITICAL: Could not import from config.py.")
+    logger.critical("CRITICAL: Could not import GOOGLE_API_KEY from config.py.")
     sys.exit(1)
 
 # --- Configure Google AI Client ---
@@ -51,7 +52,10 @@ analysis_submission_tool = FunctionDeclaration(
         "properties": {
             "product_name": {"type": "string", "description": "The main title of the product, from the provided text."},
             "brand": {"type": "string", "description": "The brand name of the product, from the provided text."},
-            "category": {"type": "string", "enum": APP_CATEGORIES, "description": "The standardized product category."},
+            "category": {
+                "type": "string",
+                "description": "The product's most specific category, derived directly from the provided text. Follow these rules strictly: 1. **Prioritize a structured path**: Look for a 'Category > ... > ...' breadcrumb trail at the start of the text and use the most specific term (e.g., 'Sneakers'). 2. **Fallback to Title**: If no structured path exists, infer the category from the product's main title. 3. **Aggressively Ignore**: You MUST ignore any text related to 'shop ratings', 'specifications', 'reviews', 'size charts', and 'shipping information' when determining the category. If no category can be reliably determined from the title or path, and only then, use 'Unknown'."
+            },
             "sustainability_analysis": {
                 "type": "object",
                 "properties": {
@@ -144,7 +148,7 @@ def get_full_product_analysis(raw_text: str) -> dict | None:
             raise ValueError("LLM did not call the expected submission function.")
 
     except Exception as e:
-        print(f"An error occurred during Google Gemini API analysis: {e}")
+        logger.error(f"An error occurred during Google Gemini API analysis: {e}", exc_info=True)
         return {
             "error": "LLM analysis failed.",            "details": str(e)
         }
