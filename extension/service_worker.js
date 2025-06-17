@@ -17,7 +17,8 @@ let tabDataCache = {};
 let activeConnections = new Map();
 
 // API Base URL
-const API_BASE_URL = 'https://api.lxkhome.duckdns.org';
+// const API_BASE_URL = 'https://api.lxkhome.duckdns.org'; // Previous public URL
+const API_BASE_URL = 'http://127.0.0.1:5000'; // For local development
 
 console.log("EcoShop Service Worker initialized, API:", API_BASE_URL);
 
@@ -383,15 +384,20 @@ async function fetchFromApi(transformedTextPayload, brandForFallback) {
       });
     });
     
-    let apiBaseUrl = settingsData.directApiEndpoint || 
-                (settingsData.settings && settingsData.settings.apiEndpoint) || 
-                "https://api.lxkhome.duckdns.org";
+    // Ensure the globally defined API_BASE_URL is used for all API calls
+    const apiBaseUrl = API_BASE_URL; 
     
-    if (apiBaseUrl.endsWith('/api/score')) {
-      apiBaseUrl = apiBaseUrl.replace('/api/score', '');
+    // console.log("User settings directApiEndpoint:", settingsData.directApiEndpoint);
+    // console.log("User settings settings.apiEndpoint:", settingsData.settings && settingsData.settings.apiEndpoint);
+    console.log("Forcing usage of API_BASE_URL:", apiBaseUrl);
+
+    // The original logic for cleaning up /api/score or trailing slashes can remain,
+    // though it might be less relevant if API_BASE_URL is always clean.
+    let cleanApiBaseUrl = apiBaseUrl;
+    if (cleanApiBaseUrl.endsWith('/api/score')) {
+      cleanApiBaseUrl = cleanApiBaseUrl.replace('/api/score', '');
     }
-    // Ensure apiBaseUrl does not end with a slash before appending path
-    const cleanApiBaseUrl = apiBaseUrl.replace(/\/$/, '');
+    cleanApiBaseUrl = cleanApiBaseUrl.replace(/\/$/, ''); // Ensure no trailing slash
     
     const postApiUrl = cleanApiBaseUrl + '/extract_and_rate';
     

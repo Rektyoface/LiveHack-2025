@@ -9,7 +9,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from config import MONGO_URI, MONGO_DB_NAME, MONGO_COLLECTION_NAME
+    from backend.scripts.config import MONGO_URI, MONGO_DB_NAME, MONGO_COLLECTION_NAME
     # Use the main collection as products collection for now
     MONGO_PRODUCTS_COLLECTION = MONGO_COLLECTION_NAME
     MONGO_DB = MONGO_DB_NAME

@@ -3,8 +3,16 @@ import json
 from groq import Groq
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import GROQ_API_KEY, APP_CATEGORIES # Import your new list
+
+# Add the parent directory (backend) to sys.path
+# This allows direct imports of modules in the backend directory, like config.py
+current_script_path = os.path.abspath(__file__)
+scripts_dir = os.path.dirname(current_script_path)
+backend_dir = os.path.dirname(scripts_dir)
+sys.path.insert(0, backend_dir) # Insert at the beginning to ensure it's checked first
+
+# Now import config directly, as 'backend' is in sys.path
+from config import GROQ_API_KEY, APP_CATEGORIES 
 
 client = Groq(api_key=GROQ_API_KEY)
 

@@ -1,0 +1,25 @@
+Request Content-Type: text/plain
+Request Headers:
+{
+  "Host": "127.0.0.1:5000",
+  "Connection": "keep-alive",
+  "Content-Length": "277",
+  "Cache-Control": "max-age=0",
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36 Edg/137.0.0.0",
+  "Content-Type": "text/plain",
+  "Accept": "*/*",
+  "Origin": "chrome-extension://lcgacccchkggonifgjbjahamlanjmnhh",
+  "Sec-Fetch-Site": "cross-site",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Dest": "empty",
+  "Accept-Encoding": "gzip, deflate, br, zstd",
+  "Accept-Language": "en-US,en;q=0.9,en-GB;q=0.8"
+}
+
+--- RAW TEXT CONTENT ---
+URL: https://shopee.sg/Xiaomi-TV-Box-S-2nd-Gen-i.178877065.5201808158
+Product Brand: Xiaomi Global Official Store
+Product Name: Xiaomi TV Box S 2nd Gen
+Product Specifications:
+CategoryShopeeHome AppliancesTV AccessoriesTV Boxes: Stock95
+Product Description: Product Description

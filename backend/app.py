@@ -19,12 +19,12 @@ from pymongo.errors import ConnectionFailure
 from dotenv import load_dotenv
 # Import the cleaned export function
 from scripts.export_to_mongo import export_product_to_mongo
-# Import utility functions
+# Import utility fu`nctions
 from scripts.utils import clean_specifications, generate_sustainability_advice
 
 # Import new modules
 from watch import stream_task_changes, create_task_document, update_task_status
-import config  # Import from local config.py
+import scripts.config as config  # Import from local config.py
 
 # Load environment variables from .env file if present
 load_dotenv()
@@ -778,18 +778,41 @@ def extract_and_rate_product():
     Main endpoint for browser extension to extract product info and rate sustainability.
     This function coordinates with the shopee_processor module for all analysis.
     """
+    logger.info(f"--- EXTRACT_AND_RATE: NEW REQUEST ---")
+    entry_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'entry.txt')
     try:
-        # Log minimal request info 
-        logger.info(f'Request received: {request.path} [{request.content_type}]')
+        logger.info(f"Content-Type: {request.content_type}")
+
+        raw_data_bytes = request.get_data()
+        raw_text_content = None
+        try:
+            raw_text_content = raw_data_bytes.decode('utf-8', errors='replace')
+            with open(entry_file_path, 'w', encoding='utf-8') as f:
+                f.write(f"Request Content-Type: {request.content_type}\n")
+                f.write(f"Request Headers:\n{json.dumps(dict(request.headers), indent=2)}\n\n")
+                f.write("--- RAW TEXT CONTENT ---\n")
+                f.write(raw_text_content)
+            logger.info(f"Raw request data written to {entry_file_path}")
+        except Exception as e:
+            logger.error(f"Error decoding raw request data as UTF-8 or writing to entry.txt: {e}")
+            # Try to write bytes if decoding failed, for debugging
+            try:
+                with open(entry_file_path, 'wb') as f_bytes: # Open in binary mode
+                    f_bytes.write(f"Request Content-Type: {request.content_type}\n".encode('utf-8'))
+                    f_bytes.write(f"Request Headers:\n{json.dumps(dict(request.headers), indent=2)}\n\n".encode('utf-8'))
+                    f_bytes.write(b"--- RAW BYTE CONTENT (UTF-8 decoding failed) ---\n")
+                    f_bytes.write(raw_data_bytes)
+                logger.info(f"Raw request byte data written to {entry_file_path} due to decoding error.")
+            except Exception as e_bytes:
+                logger.error(f"Failed to write raw byte data to entry.txt: {e_bytes}")
+            # raw_text_content will be None if decoding failed here
+
+        start_time = datetime.datetime.now(datetime.UTC) # Use timezone-aware UTC now
         
-        # Track processing start time
-        start_time = datetime.datetime.utcnow()
-        
-        # Import the processor module
         try:
             from scripts.shopee_processor import process_shopee_product
-            from scripts.url_parser import extract_text_from_request, extract_url_from_request
-            logger.info("Successfully imported processing modules")
+            from scripts.url_parser import extract_text_from_request, extract_url_from_request # Keep for fallback
+            logger.info("Processing modules imported.")
         except ImportError as e:
             logger.error(f"Failed to import processing modules: {str(e)}")
             return jsonify({
@@ -797,18 +820,72 @@ def extract_and_rate_product():
                 'error': 'Backend processing modules unavailable'
             }), 500
         
-        # Step 1: Parse the incoming data using dedicated parser functions
-        product_url = extract_url_from_request(request)
-        raw_text_content = extract_text_from_request(request)
-        
-        # Extract user weights if provided
+        product_url = None
         user_weights = None
-        if request.content_type == 'application/json':
-            data = request.get_json()
-            if data and 'user_weights' in data and isinstance(data['user_weights'], dict):
-                user_weights = data['user_weights']
         
-        # Step 2: Validate that we have enough data to process
+        # Initialize structured product info dictionary for logging
+        logged_product_info = {
+            "Product URL": "Not found/parsed",
+            "Product Brand": "Not found/parsed",
+            "Product Name": "Not found/parsed",
+            "Product Specifications": "Not found/parsed",
+            "Product Description": "Not found/parsed",
+            "User Weights": "Not provided"
+        }
+
+        if request.content_type == 'application/json':
+            data = request.get_json(silent=True)
+            if data:
+                product_url = data.get('url')
+                logged_product_info["Product URL"] = product_url or "Not in JSON"
+                
+                json_plain_text = data.get('plainText')
+                if json_plain_text:
+                    raw_text_content = json_plain_text
+                    # Attempt to parse structured info from plainText if it's the primary source
+                    brand_match = re.search(r"Product Brand: (.*?)(?:\nProduct Name:|$)", raw_text_content, re.DOTALL)
+                    name_match = re.search(r"Product Name: (.*?)(?:\nProduct Specifications:|$)", raw_text_content, re.DOTALL)
+                    specs_match = re.search(r"Product Specifications:(.*?)(?:\nProduct Description:|$)", raw_text_content, re.DOTALL)
+                    desc_match = re.search(r"Product Description:(.*)", raw_text_content, re.DOTALL)
+
+                    if brand_match: logged_product_info["Product Brand"] = brand_match.group(1).strip()
+                    if name_match: logged_product_info["Product Name"] = name_match.group(1).strip()
+                    if specs_match: logged_product_info["Product Specifications"] = specs_match.group(1).strip()
+                    if desc_match: logged_product_info["Product Description"] = desc_match.group(1).strip()
+                elif not raw_text_content: # Fallback if no plainText and initial decode was empty
+                    # This case should be rare if raw_data_text was successfully decoded initially
+                    pass # raw_text_content remains from initial get_data()
+
+                if 'user_weights' in data and isinstance(data['user_weights'], dict):
+                    user_weights = data['user_weights']
+                    logged_product_info["User Weights"] = json.dumps(user_weights)
+            # else: JSON was empty, raw_text_content from get_data() will be used if available
+        elif 'text/plain' in request.content_type:
+            # raw_text_content is already populated from the initial get_data()
+            # Attempt to parse structured info from plainText
+            if raw_text_content:
+                url_match_text = re.search(r"URL: (https?://[^\s]+)", raw_text_content)
+                if url_match_text: product_url = url_match_text.group(1).strip()
+                logged_product_info["Product URL"] = product_url or "Not in plain text"
+
+                brand_match = re.search(r"Product Brand: (.*?)(?:\nProduct Name:|$)", raw_text_content, re.DOTALL)
+                name_match = re.search(r"Product Name: (.*?)(?:\nProduct Specifications:|$)", raw_text_content, re.DOTALL)
+                specs_match = re.search(r"Product Specifications:(.*?)(?:\nProduct Description:|$)", raw_text_content, re.DOTALL)
+                desc_match = re.search(r"Product Description:(.*)", raw_text_content, re.DOTALL)
+
+                if brand_match: logged_product_info["Product Brand"] = brand_match.group(1).strip()
+                if name_match: logged_product_info["Product Name"] = name_match.group(1).strip()
+                if specs_match: logged_product_info["Product Specifications"] = specs_match.group(1).strip()
+                if desc_match: logged_product_info["Product Description"] = desc_match.group(1).strip()
+        # else: Other content types, raw_text_content from get_data() will be used if available
+        
+        # Log the structured product information
+        logger.info("--- PARSED PRODUCT INFO (FOR PROCESSOR) ---")
+        for key, value in logged_product_info.items():
+            logger.info(f"{key}: {value[:500] if isinstance(value, str) else value}...") # Log first 500 chars
+        logger.info(f"Raw text content length for processor: {len(raw_text_content) if raw_text_content else 0}")
+        logger.info("-----------------------------------------")
+
         if not product_url and not raw_text_content:
             logger.warning("Missing both product URL and raw text content in request")
             return jsonify({
@@ -816,8 +893,10 @@ def extract_and_rate_product():
                 'error': 'Missing required data: need either product URL or text content'
             }), 400
         
-        # Step 3: Process the product using the dedicated processor
-        logger.info(f"Processing product - URL: {product_url or 'Not provided'}, text length: {len(raw_text_content) if raw_text_content else 0}")
+        logger.info(f"--- CALLING PROCESSOR (shopee_processor.py) ---")
+        # logger.info(f"URL to processor: {product_url or 'Not provided'}") # Already logged in structured info
+        # logger.info(f"Text Length to processor: {len(raw_text_content) if raw_text_content else 0}") # Already logged
+        # logger.info(f"User Weights to processor: {user_weights}") # Already logged
         
         processed_result = process_shopee_product(
             url=product_url,
@@ -825,17 +904,18 @@ def extract_and_rate_product():
             user_weights=user_weights
         )
         
-        # Step 4: Check results and prepare response
         if not processed_result:
-            logger.warning("Product processing failed or returned no data")
+            logger.warning("Product processing failed or returned no data from shopee_processor")
             return jsonify({
                 'success': False,
                 'error': 'Product analysis failed - check database connection and API keys'
             }), 500
         
-        # Step 5: Prepare the response to send back to the extension
-        processing_time_ms = (datetime.datetime.utcnow() - start_time).total_seconds() * 1000        
-        # Create the result from the processed data
+        processing_time_ms = (datetime.datetime.now(datetime.UTC) - start_time).total_seconds() * 1000        
+        logger.info(f"--- PROCESSOR RESULT (from shopee_processor.py) ---")
+        logger.info(f"{json.dumps(processed_result, indent=2)}")
+        logger.info("--------------------------------------------------")
+        
         result = {
             'url': product_url,
             'brand': processed_result.get('brand', 'Unknown'),
@@ -844,16 +924,17 @@ def extract_and_rate_product():
             'score': processed_result.get('sustainability_score', 0),
             'breakdown': processed_result.get('sustainability_breakdown', {}),
             'processing_time_ms': processing_time_ms,
-            'timestamp': datetime.datetime.utcnow().isoformat() + 'Z'
+            'timestamp': datetime.datetime.now(datetime.UTC).isoformat() + 'Z'
         }
         
-        # Return the processed result
-        logger.info(f"Successfully processed product: {result.get('name', 'Unknown')}")
+        logger.info(f"--- FINAL RESPONSE TO EXTENSION ---")
+        logger.info(f"{json.dumps({'success': True, 'data': result}, indent=2)}")
+        logger.info("-----------------------------------")
         return jsonify({'success': True, 'data': result})
 
     except Exception as e:
-        logger.error(f"Error in /extract_and_rate: {str(e)}", exc_info=True)
-        return jsonify({'success': False, 'error': 'An internal server error occurred'}), 500
+        logger.error(f"CRITICAL ERROR in /extract_and_rate: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': f'An internal server error occurred: {str(e)}'}), 500
 
 @app.route('/rate_product', methods=['POST'])
 def rate_product():
@@ -920,7 +1001,7 @@ def rate_product():
             'factors': factors,
             'weights': weights,
             'advice': generate_sustainability_advice(factors),
-            'timestamp': datetime.datetime.utcnow()
+            'timestamp': datetime.datetime.now(datetime.UTC) # Updated
         }
         
         # Also extract any product information if available
@@ -951,7 +1032,7 @@ def rate_product():
                     identifier['name'] = name
                 else:
                     # If no product identifiers, use request ID or timestamp
-                    identifier['request_id'] = str(datetime.datetime.utcnow().timestamp())
+                    identifier['request_id'] = str(datetime.datetime.now(datetime.UTC).timestamp()) # Updated
                 
                 # Store in MongoDB
                 update_result = collection.update_one(
@@ -1012,4 +1093,5 @@ if __name__ == '__main__':
         logger.warning("MongoDB connection not available - running in test mode")
     # Run the app
     port = int(os.environ.get('PORT', 5000))
+    logger.info(f"Flask app starting on host 0.0.0.0, port {port}")
     app.run(host='0.0.0.0', port=port, debug=True)
