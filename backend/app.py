@@ -24,7 +24,7 @@ from scripts.utils import clean_specifications, generate_sustainability_advice
 
 # Import new modules
 from watch import stream_task_changes, create_task_document, update_task_status
-import config  # Import from local config.py
+import scripts.config
 
 # Load environment variables from .env file if present
 load_dotenv()

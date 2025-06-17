@@ -9,10 +9,9 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from config import MONGO_URI, MONGO_DB_NAME, MONGO_COLLECTION_NAME
+    from config import MONGO_URI, MONGO_PRODUCTS_COLLECTION, MONGO_DB
     # Use the main collection as products collection for now
-    MONGO_PRODUCTS_COLLECTION = MONGO_COLLECTION_NAME
-    MONGO_DB = MONGO_DB_NAME
+
 except ImportError:
     print("Error: config.py not found or missing required variables.")
     # Set to None so the application can gracefully handle the missing config
