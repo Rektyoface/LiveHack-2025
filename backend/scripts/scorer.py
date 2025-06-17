@@ -1,4 +1,3 @@
-# scripts/scorer.py (Simplified Version - No Confidence Score)
 
 # ==============================================================================
 # Part 1: Configuration
@@ -38,9 +37,6 @@ def generate_sustainability_breakdown(analysis_json: dict) -> dict:
     Returns:
         A dictionary containing the detailed sustainability breakdown.
     """
-    logger.info("=== SCORER: GENERATING SUSTAINABILITY BREAKDOWN ===")
-    logger.info(f"Input analysis_json: {json.dumps(analysis_json, indent=2)}")
-    
     breakdown = {}
     # The new analysis is nested under the 'sustainability_analysis' key
     sustainability_analysis = analysis_json.get('sustainability_analysis', {})
@@ -68,44 +64,25 @@ def calculate_weighted_score(sustainability_breakdown: dict, user_weights: dict 
     Returns:
         The final sustainability score, an integer between 0 and 100.
     """
-    logger.info("=== SCORER: CALCULATING WEIGHTED SCORE ===")
-    logger.info(f"Sustainability breakdown: {json.dumps(sustainability_breakdown, indent=2)}")
-    logger.info(f"User weights: {user_weights}")
-    
     # Use user-provided weights, or fall back to the defaults
     weights = user_weights or DEFAULT_WEIGHTS
-    logger.info(f"Using weights: {weights}")
     
     total_weighted_score = 0
-    total_weight = 0
-    
-    logger.info("Processing each category...")
     # Iterate through the breakdown object to calculate the total score
     for category, breakdown_details in sustainability_breakdown.items():
         # Get the normalized score (-1.0 to 1.0) for the category
         score = breakdown_details.get('score', 0.0)
         # Get the user's weight for that category
         weight = weights.get(category, 0)
-        
-        weighted_contribution = score * weight
-        total_weighted_score += weighted_contribution
-        total_weight += weight
-        
-        logger.info(f"  {category}: score={score}, weight={weight}, contribution={weighted_contribution}")
+        total_weighted_score += score * weight
+
+    # Normalize the final score to be on a 0-100 scale
+    total_weights = sum(weights.values())
+    if total_weights == 0:
+        return 50 # Return a neutral 50 if weights are all zero
+
+    # The formula maps the raw score range [ -total_weights, +total_weights ] to [ 0, 100 ]
+    normalized_score = 50 + 50 * (total_weighted_score / total_weights)
     
-    logger.info(f"Total weighted score: {total_weighted_score}")
-    logger.info(f"Total weight: {total_weight}")
-    
-    # Avoid division by zero
-    if total_weight == 0:
-        logger.warning("Total weight is 0, returning score of 50")
-        return 50
-      # Calculate the average weighted score
-    average_weighted_score = total_weighted_score / total_weight
-    logger.info(f"Average weighted score: {average_weighted_score}")
-    
-    # Convert from -1.0 to 1.0 scale to 0 to 100 scale
-    final_score = int((average_weighted_score + 1) * 50)
-    logger.info(f"Final score (0-100): {final_score}")
-    
-    return final_score
+    # Clamp the result to ensure it's always within the 0-100 range
+    return max(0, min(100, int(normalized_score)))
