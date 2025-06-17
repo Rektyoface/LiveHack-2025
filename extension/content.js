@@ -764,41 +764,44 @@
         positionStyles = 'bottom: 50px; right: 5px;';
     }
     
-    const fontSize = seniorMode ? '36px' : '32px';
-    const titleSize = seniorMode ? '20px' : '16px';
-    const subtitleSize = seniorMode ? '15px' : '12px';
-    const paddingSize = seniorMode ? '20px' : '15px';
-    const badgeWidth = seniorMode ? '270px' : '240px';
-
+    const fontSize = seniorMode ? '2.25rem' : '2rem';         // main score
+    const titleSize = seniorMode ? '1.25rem' : '1rem';        // heading
+    const subtitleSize = seniorMode ? '1rem' : '0.875rem';    // description
+    const paddingSize = seniorMode ? '1.5em' : '1em';
+    const badgeWidth = seniorMode ? '22vw' : '18vw';          // viewport-based for flexibility
 
     badge.style.cssText = `
       position: fixed;
       ${positionStyles}
       background-color: ${darkMode ? '#222' : 'white'};
       color: ${darkMode ? '#fff' : '#333'};
-      border: 2px solid #${getColorForScore(sustainabilityData.score)};
-      border-radius: 8px;
+      border: 0.125rem solid #${getColorForScore(sustainabilityData.score)};
+      border-radius: 0.5rem;
       padding: ${paddingSize};
       width: ${badgeWidth};
       z-index: 10000;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+      box-shadow: 0 0.125rem 0.625rem rgba(0,0,0,0.3);
       font-family: Arial, sans-serif;
       cursor: pointer;
       transition: opacity 0.4s cubic-bezier(0.4,0,0.2,1), transform 0.4s cubic-bezier(0.4,0,0.2,1);
     `;
+
     
     badge.innerHTML = `
-      <h3 style="margin: 0 0 10px 0; font-size: ${titleSize}; color: ${darkMode ? '#fff' : '#333'};">Sustainability Score</h3>
+      <h3 style="margin: 0 0 0.625rem 0; font-size: ${titleSize}; color: ${darkMode ? '#fff' : '#333'};">
+        Sustainability Score
+      </h3>
       <div style="font-size: ${fontSize}; font-weight: bold; color: #${getColorForScore(sustainabilityData.score)};">
         ${sustainabilityData.score}/100
       </div>
-      <p style="margin: 10px 0 0 0; font-size: ${subtitleSize};">
+      <p style="margin: 0.625rem 0 0 0; font-size: ${subtitleSize};">
         Click for details
       </p>
-      <div style="margin-top: 8px; font-size: ${subtitleSize}; color: ${darkMode ? '#ccc' : '#666'};">
+      <div style="margin-top: 0.5rem; font-size: ${subtitleSize}; color: ${darkMode ? '#ccc' : '#666'};">
         Or click the extension icon in the toolbar
       </div>
     `;
+
 
     
     document.body.appendChild(badge);
