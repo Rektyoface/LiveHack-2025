@@ -94,49 +94,58 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log("popup.js: Data object:", data); // Added for debugging
 
     productInfoElement.classList.remove('hidden');
-    const scoreColor = getScoreColor(data.default_sustainability_score);
+    // Only use score from backend, never use default_sustainability_score
+    let mainScore = typeof data.score === 'number' ? data.score : undefined;
+    let displayScore = mainScore; // Use backend score directly
+    const scoreColor = getScoreColor(displayScore);
     scoreValueElement.style.color = '#FFF';
     scoreValueElement.parentElement.style.backgroundColor = scoreColor;
-    brandNameElement.textContent = data.brand_name || "Unknown Brand";
-    scoreValueElement.textContent = data.default_sustainability_score || "N/A";
+    brandNameElement.textContent = data.brand_name || data.brand || "Unknown Brand";
+    scoreValueElement.textContent = displayScore !== undefined ? displayScore : "Unknown";
 
     sustainabilityMetricsContainer.innerHTML = '';
 
     // Use 'sustainability_breakdown' if present, else fallback to 'breakdown' (from backend)
     const breakdown = data.sustainability_breakdown || data.breakdown;
+    let detailsData = [];
 
     if (breakdown) {
-      console.log("popup.js: sustainability_breakdown object:", breakdown); // Added for debugging
-      for (const key in breakdown) {
-        if (Object.hasOwnProperty.call(breakdown, key)) {
-          console.log("popup.js: Processing breakdown key:", key); // Added for debugging
-          const metricData = breakdown[key];
-          const metricElement = document.createElement('div');
-          metricElement.className = 'metric';
-
-          const title = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          const ratingValue = metricData.score * 10;
-          const analysisText = metricData.analysis;
-
-          metricElement.innerHTML = `
-            <h3>${title}</h3>
-            <div class="metric-value">Rating: ${ratingValue.toFixed(1)}/10</div>
-            <div class="meter">
-              <div class="meter-bar" style="width: ${ratingValue * 10}%; background-color: ${getScoreColor(ratingValue * 10)};"></div>
-            </div>
-            <button class="details-button" data-title="${title}" data-analysis='${JSON.stringify(analysisText)}'>Show Details</button>
-          `;
-          sustainabilityMetricsContainer.appendChild(metricElement);
+      console.log("popup.js: sustainability_breakdown object:", breakdown); // Debug
+      const fieldOrder = [
+        { key: 'production_and_brand', label: 'Production And Brand' },
+        { key: 'circularity_and_end_of_life', label: 'Circularity And End Of Life' },
+        { key: 'material_composition', label: 'Material Composition' }
+      ];
+      fieldOrder.forEach(field => {
+        const metricData = breakdown[field.key] || {};
+        let value = metricData.value || metricData.rating || "Unknown";
+        let score = typeof metricData.score === 'number' ? metricData.score : undefined;
+        // No rebasing: display score directly
+        let displayFieldScore = score;
+        let analysis = metricData.analysis || "we could not find data";
+        // Show 'we could not find data' only if value is 'Unknown' or missing AND score is missing/undefined/0
+        if ((value === "Unknown" || !value) && (!score || score === 0)) {
+          value = "we could not find data";
         }
-      }
-      document.querySelectorAll('.details-button').forEach(button => {
-        button.addEventListener('click', function() {
-          const title = this.dataset.title;
-          const analysis = JSON.parse(this.dataset.analysis);
-          chrome.storage.local.set({ sustainabilityDetails: { title, analysis } }, function() {
-            window.location.href = 'details.html';
-          });
+        // Show 'Unknown' if score is -1
+        let ratingText = (score === -1) ? '(Rating: Unknown --/10)' : (typeof displayFieldScore === 'number' ? `(Rating: ${displayFieldScore}/10)` : (score === 0 ? '(Rating: 0/10)' : '(Rating: --/10)'));
+        detailsData.push({
+          title: field.label,
+          value,
+          score: displayFieldScore,
+          analysis
         });
+        // Render summary in popup
+        const metricElement = document.createElement('div');
+        metricElement.className = 'metric';
+        metricElement.innerHTML = `
+          <h3>${field.label}</h3>
+          <div class="metric-value">${value} ${ratingText}</div>
+          <div class="meter">
+            <div class="meter-bar" style="width: ${displayFieldScore && displayFieldScore > 0 ? displayFieldScore * 10 : 0}%; background-color: ${getScoreColor(displayFieldScore && displayFieldScore > 0 ? displayFieldScore * 10 : 0)};"></div>
+          </div>
+        `;
+        sustainabilityMetricsContainer.appendChild(metricElement);
       });
     } else {
       // Always show the 3 default fields with placeholder values
@@ -146,17 +155,31 @@ document.addEventListener('DOMContentLoaded', function() {
         { key: 'material_composition', label: 'Material Composition' }
       ];
       defaultFields.forEach(field => {
+        detailsData.push({
+          title: field.label,
+          value: "we could not find data",
+          score: 0.0,
+          analysis: "we could not find data"
+        });
         const metricElement = document.createElement('div');
         metricElement.className = 'metric';
         metricElement.innerHTML = `
           <h3>${field.label}</h3>
-          <div class="metric-value">Rating: --/10</div>
+          <div class="metric-value">we could not find data (Rating: --/10)</div>
           <div class="meter">
             <div class="meter-bar" style="width: 0%; background-color: #ccc;"></div>
           </div>
-          <button class="details-button" disabled>Show Details</button>
         `;
         sustainabilityMetricsContainer.appendChild(metricElement);
+      });
+    }
+
+    // Show Details button logic
+    const showDetailsButton = document.getElementById('show-details');
+    showDetailsButton.disabled = false;
+    showDetailsButton.onclick = function() {
+      chrome.storage.local.set({ sustainabilityDetails: { allFields: detailsData } }, function() {
+        window.location.href = 'details.html';
       });
     }
 
@@ -166,7 +189,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (data.message) { // Assuming message is still part of the response
       sustainabilityMessageElement.textContent = data.message;
     } else {
-      sustainabilityMessageElement.textContent = getDefaultMessage(data.default_sustainability_score);
+      sustainabilityMessageElement.textContent = getDefaultMessage(mainScore);
     }
     if (data.alternatives && data.alternatives.length > 0) {
       alternativesListElement.innerHTML = '';

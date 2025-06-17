@@ -4,33 +4,19 @@ document.addEventListener('DOMContentLoaded', function () {
   const backButton = document.getElementById('back-button');
 
   chrome.storage.local.get(['sustainabilityDetails'], function (result) {
-    if (result.sustainabilityDetails) {
-      const { title, analysis } = result.sustainabilityDetails;
-      detailsTitleElement.textContent = title || 'Sustainability Details';
-      
-      // Format the analysis text
-      let formattedAnalysis = '';
-      if (typeof analysis === 'string') {
-        // Simple paragraph for plain string
-        formattedAnalysis = `<p>${analysis.replace(/\n/g, '<br>')}</p>`;
-      } else if (typeof analysis === 'object') {
-        // If it's an object, iterate and display key-value pairs
-        for (const key in analysis) {
-          if (Object.hasOwnProperty.call(analysis, key)) {
-            const value = analysis[key];
-            const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()); // Format key
-            formattedAnalysis += `<h3>${formattedKey}</h3><p>${String(value).replace(/\n/g, '<br>')}</p>`;
-          }
-        }
-      } else {
-        formattedAnalysis = '<p>No details available.</p>';
-      }
-      detailsContentElement.innerHTML = formattedAnalysis;
-
-      // Clear the stored details after displaying them
+    if (result.sustainabilityDetails && result.sustainabilityDetails.allFields) {
+      const allFields = result.sustainabilityDetails.allFields;
+      let html = '';
+      allFields.forEach(field => {
+        html += `<div class="details-section">
+          <h2>${field.title}</h2>
+          <div><strong>Rating:</strong> ${field.value} (${field.score ? field.score * 10 : '--'}/10)</div>
+          <div><strong>Details:</strong> <p>${field.analysis.replace(/\n/g, '<br>')}</p></div>
+        </div><hr>`;
+      });
+      detailsContentElement.innerHTML = html;
       chrome.storage.local.remove(['sustainabilityDetails']);
     } else {
-      detailsTitleElement.textContent = 'Details Not Found';
       detailsContentElement.innerHTML = '<p>Could not load sustainability details. Please try again.</p>';
     }
   });

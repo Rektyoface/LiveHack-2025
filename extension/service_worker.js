@@ -41,6 +41,24 @@ const API_ENDPOINTS = [
 
 console.log("Using API endpoints:", API_ENDPOINTS.join(', '));
 
+// Function to generate fallback data structure
+function getFallbackProductData(productInfo = {}) {
+  return {
+    product_name: productInfo.name || "Product Information",
+    brand_name: productInfo.brand || "Brand Information",
+    // Remove default_sustainability_score, rely on backend only
+    message: "Service unavailable. Displaying placeholder information. Please check your connection or try again later.",
+    breakdown: {
+      production_and_brand: { rating: "Unknown", score: 0.0, analysis: "Service unavailable" },
+      circularity_and_end_of_life: { rating: "Unknown", score: 0.0, analysis: "Service unavailable" },
+      material_composition: { rating: "Unknown", score: 0.0, analysis: "Service unavailable" }
+    },
+    certainty: "none",
+    alternatives: [],
+    isFallback: true // Custom flag to indicate this is fallback data
+  };
+}
+
 // Main message listener - Edge-compatible single listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("Service worker received message:", message.action, message);
@@ -52,12 +70,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Call the handler and ensure response
       (async () => {
         try {
-          await handleSustainabilityCheck(message.productInfo, sendResponse, sender);
+          // Ensure productInfo is passed, even if it's an empty object
+          const productInfoForHandler = message.productInfo || {};
+          await handleSustainabilityCheck(productInfoForHandler, sendResponse, sender);
         } catch (error) {
-          console.error("Handler failed:", error);
+          console.error("Handler failed for checkSustainability, sending fallback data:", error);
           sendResponse({
-            success: false,
-            error: "Handler error: " + error.message
+            success: true, // Indicate success to allow popup to render fallback
+            data: getFallbackProductData(message.productInfo || {})
           });
         }
       })();
@@ -98,10 +118,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         try {
           await handleSustainabilityCheck(productInfo, sendResponse, sender);
         } catch (error) {
-          console.error("Handler failed:", error);
+          console.error("Handler failed for checkCurrentPage, sending fallback data:", error);
           sendResponse({
-            success: false,
-            error: "Handler error: " + error.message
+            success: true, // Indicate success to allow popup to render fallback
+            data: getFallbackProductData(productInfo)
           });
         }
       })();
@@ -132,14 +152,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } catch (err) {
     console.error("Service worker error:", err);
     try { 
-      sendResponse({ success: false, error: 'Internal error in service worker: ' + err.message }); 
+      // For general errors not caught by specific handlers, also send fallback
+      sendResponse({ 
+        success: true, 
+        data: getFallbackProductData(),
+        error: 'Internal error in service worker: ' + err.message 
+      }); 
     } catch (e) {
-      console.log("Failed to send error response:", e);
+      console.log("Failed to send error response with fallback:", e);
     }
-    return false;
+    return false; // Return false as sendResponse might have been called
   }
   
-  // Default fallback
+  // Default fallback for unknown actions - consider if this should also send structured fallback
   console.log("Unknown message action:", message.action);
   sendResponse({ success: false, error: "Unknown action" });
   return false;
@@ -619,13 +644,18 @@ function generateTestScore(productInfo) {
 
 // Handle extension icon badge updates
 function updateBadgeForTab(tabId, score) {
-  let color;
-  if (score >= 70) color = [76, 175, 80, 255]; // Green
-  else if (score >= 40) color = [255, 193, 7, 255]; // Yellow/Amber
-  else color = [244, 67, 54, 255]; // Red
-  
-  chrome.action.setBadgeBackgroundColor({ color, tabId });
-  chrome.action.setBadgeText({ text: score.toString(), tabId });
+  // Only show badge if score is a valid number and not fallback/test/unknown
+  if (typeof score === 'number' && !isNaN(score)) {
+    chrome.action.setBadgeText({ text: String(score), tabId }); // Use backend score directly for badge
+    let color = '#FFC107';
+    if (score >= 70) color = '#4CAF50';
+    else if (score < 40) color = '#F44336';
+    chrome.action.setBadgeBackgroundColor({ color, tabId });
+  } else {
+    // Fade/clear badge if no valid score
+    chrome.action.setBadgeText({ text: '', tabId });
+    chrome.action.setBadgeBackgroundColor({ color: '#888', tabId });
+  }
 }
 
 // Helper function to format product info as plain text (fallback if content.js doesn't provide it)

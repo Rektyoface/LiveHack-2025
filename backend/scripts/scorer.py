@@ -13,11 +13,11 @@ DEFAULT_WEIGHTS = {
 # A single, standardized map for converting the LLM's ratings into numerical scores.
 # The scale is from -1.0 (very bad) to 1.0 (very good).
 RATING_SCORES = {
-    'Excellent': 1.0,
-    'Good': 0.6,
-    'Neutral': 0.0,
-    'Poor': -1.0,
-    'Unknown': 0.0, # Treat 'Unknown' as a neutral 0.0 score.
+    'Excellent': 10,
+    'Good': 8,
+    'Neutral': 5,
+    'Poor': 0,
+    'Unknown': -1, # Special case for unknown
 }
 
 import json
@@ -73,15 +73,17 @@ def calculate_weighted_score(sustainability_breakdown: dict, user_weights: dict 
     """
     # Use user-provided weights, or fall back to the defaults
     weights = user_weights or DEFAULT_WEIGHTS
-    
     total_weighted_score = 0
     # Iterate through the breakdown object to calculate the total score
     for category, breakdown_details in sustainability_breakdown.items():
-        # Get the normalized score (-1.0 to 1.0) for the category
-        score = breakdown_details.get('score', 0.0)
-        # Get the user's weight for that category
+        # Map new 0-10 scale to old -1.0 to 1.0 scale for scoring logic
+        score = breakdown_details.get('score', -1)
+        if score == -1:
+            normalized_score = 0.0 # treat unknown as neutral for overall
+        else:
+            normalized_score = (score - 5) / 5  # 0->-1, 5->0, 10->1
         weight = weights.get(category, 0)
-        total_weighted_score += score * weight
+        total_weighted_score += normalized_score * weight
 
     # Normalize the final score to be on a 0-100 scale
     total_weights = sum(weights.values())

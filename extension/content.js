@@ -14,6 +14,13 @@
       hasRequestedData = false;
       hasShownErrorToast = false;
       lastExtractedProduct = null;
+      // Fade/clear badge immediately on navigation
+      let badge = document.getElementById('ecoshop-sustainability-badge');
+      if (badge) {
+        badge.style.opacity = '0.3';
+        badge.style.filter = 'grayscale(1)';
+        setTimeout(() => { if (badge.parentNode) badge.parentNode.removeChild(badge); }, 400);
+      }
       console.log("EcoShop: Page URL changed, resetting flags and re-initializing observer");
       
       // Reset the observer
