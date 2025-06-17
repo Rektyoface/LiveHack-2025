@@ -1,13 +1,19 @@
-Flask==2.2.3
-Flask-Cors==3.0.10
-gunicorn==20.1.0
-requests==2.28.2
-pymongo[srv]==4.5.0
-Werkzeug==2.2.3
-groq==0.4.1
-certifi==2023.7.22
-urllib3==1.26.16
-typing-extensions==4.7.1
-python-dotenv==1.0.0
-argparse==1.4.0
-pydantic==2.0.3
+# --- Core Web Application Framework ---
+# For running the API server (main.py)
+Flask
+Flask-Cors
+gunicorn
+
+# --- Database Driver ---
+# For connecting to MongoDB. The [srv] option includes extra
+# dependencies needed to connect to MongoDB Atlas.
+pymongo[srv]
+
+# --- Google Gemini LLM API Client ---
+# The official library to interact with the Gemini API (free tier).
+google-generativeai
+
+# --- Utilities ---
+
+# For handling SSL certificates with MongoDB Atlas, a good practice.
+certifi

@@ -1,37 +1,91 @@
-# analyzer.py
+# scripts/analyzer.py (Advanced: Using the correct gemini-1.5-flash-latest model)
+
 import json
-from groq import Groq
+import google.generativeai as genai
+from google.generativeai.types import Tool, FunctionDeclaration
 import sys
 import os
-import logging
-import config
 
-# Configure logging for analyzer
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('analyzer')
+# --- Path Correction and Config Import ---
+try:
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, project_root)
+    from config import GOOGLE_API_KEY, APP_CATEGORIES
+except ImportError:
+    print("CRITICAL: Could not import from config.py.")
+    sys.exit(1)
 
-# If config.py is in the same directory (scripts) as analyzer.py:
-from config import GROQ_API_KEY, APP_CATEGORIES
-# The sys.path manipulations for finding config in a parent directory are removed,
-# as config.py is stated to be in the same 'scripts' directory.
-# The shopee_processor.py (which imports analyzer.py) should already handle 
-# adding the 'backend' directory to sys.path if necessary for other imports 
-# that analyzer.py might make (though currently it doesn't seem to make other local ones).
+# --- Configure Google AI Client ---
+try:
+    genai.configure(api_key=GOOGLE_API_KEY)
+except Exception as e:
+    print(f"CRITICAL: Failed to configure Google AI. Error: {e}")
+    sys.exit(1)
 
-client = Groq(api_key=GROQ_API_KEY)
+# --- Define the Tools ---
+
+# Tool 1: Google Search (for information gathering)
+google_search_tool = FunctionDeclaration(
+    name="google_search",
+    description="Performs a Google search to find public information about a company's sustainability practices or product materials.",
+    parameters={
+        "type": "object",
+        "properties": {"query": {"type": "string", "description": "A specific search query."}},
+        "required": ["query"]
+    }
+)
+
+# Tool 2: The Final Answer Formatter (for structured output)
+analysis_submission_tool = FunctionDeclaration(
+    name="submit_sustainability_analysis",
+    description="Submits the complete, final sustainability analysis once all information has been gathered and synthesized.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "product_name": {"type": "string", "description": "The main title of the product, from the provided text."},
+            "brand": {"type": "string", "description": "The brand name of the product, from the provided text."},
+            "category": {"type": "string", "enum": APP_CATEGORIES, "description": "The standardized product category."},
+            "sustainability_analysis": {
+                "type": "object",
+                "properties": {
+                    "material_composition": {
+                        "type": "object",
+                        "properties": {
+                            "analysis": {"type": "string"}, "rating": {"type": "string", "enum": ["Excellent", "Good", "Neutral", "Poor", "Unknown"]}, "reasoning": {"type": "string"}
+                        },
+                        "required": ["analysis", "rating", "reasoning"]
+                    },
+                    "production_and_brand": {
+                        "type": "object",
+                        "properties": {
+                            "analysis": {"type": "string"}, "rating": {"type": "string", "enum": ["Excellent", "Good", "Neutral", "Poor", "Unknown"]}, "reasoning": {"type": "string"}
+                        },
+                        "required": ["analysis", "rating", "reasoning"]
+                    },
+                    "circularity_and_end_of_life": {
+                        "type": "object",
+                        "properties": {
+                            "analysis": {"type": "string"}, "rating": {"type": "string", "enum": ["Excellent", "Good", "Neutral", "Poor", "Unknown"]}, "reasoning": {"type": "string"}
+                        },
+                        "required": ["analysis", "rating", "reasoning"]
+                    }
+                },
+                "required": ["material_composition", "production_and_brand", "circularity_and_end_of_life"]
+            }
+        },
+        "required": ["product_name", "brand", "category", "sustainability_analysis"]
+    }
+)
+
+model = genai.GenerativeModel(
+    model_name='gemini-2.5-flash-preview-05-20', 
+    tools=[google_search_tool, analysis_submission_tool]
+)
+
 
 def get_full_product_analysis(raw_text: str) -> dict | None:
-    logger.info("=== ANALYZER: STARTING LLM ANALYSIS ===")
-    logger.info(f"Input text length: {len(raw_text) if raw_text else 0}")
-    logger.info(f"GROQ API key configured: {bool(GROQ_API_KEY)}")
-    
-    if not raw_text or not raw_text.strip():
-        logger.error("FAILED: No raw text provided for analysis")
-        return None
-    
     # Convert the list of categories into a comma-separated string for the prompt
     category_list_str = ", ".join(f'"{cat}"' for cat in APP_CATEGORIES)
-    logger.info(f"Using categories: {category_list_str}")
     
     system_prompt = f"""
     You are a powerful data extraction engine. Your task is to parse a raw text dump from a product page and convert it into a structured JSON object.
@@ -75,10 +129,6 @@ def get_full_product_analysis(raw_text: str) -> dict | None:
       }}
     }}
     """
-    
-    logger.info("Sending request to Groq LLM...")
-    logger.info(f"Raw text preview (first 1000 chars): {raw_text[:1000]}...")
-    
     try:
         chat_completion = client.chat.completions.create(
             messages=[
@@ -89,24 +139,11 @@ def get_full_product_analysis(raw_text: str) -> dict | None:
             temperature=0.0, # Set to 0 for maximum fact-based adherence
             response_format={"type": "json_object"},
         )
-        
-        logger.info("SUCCESS: Received response from Groq LLM")
-        
-        # Parse the JSON response
-        response_content = chat_completion.choices[0].message.content
-        logger.info(f"Raw LLM response: {response_content}")
-        
-        parsed_response = json.loads(response_content)
-        logger.info(f"Parsed LLM response: {json.dumps(parsed_response, indent=2)}")
-        
-        return parsed_response
-        
-    except json.JSONDecodeError as e:
-        logger.error(f"FAILED: Invalid JSON response from LLM: {e}")
-        logger.error(f"Raw response was: {chat_completion.choices[0].message.content if 'chat_completion' in locals() else 'No response received'}")
-        return None
-        
+        return json.loads(chat_completion.choices[0].message.content)
     except Exception as e:
-        logger.error(f"FAILED: An error occurred during LLM analysis: {e}")
-        logger.error(f"Error type: {type(e).__name__}")
-        return None
+        print(f"An error occurred during LLM analysis: {e}")
+        # Return a structured error dictionary instead of None
+        return {
+            "error": "LLM analysis failed.",
+            "details": str(e)
+        }

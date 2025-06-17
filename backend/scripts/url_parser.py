@@ -1,12 +1,13 @@
-# url_parser.py (Simple, No-Import Version)
+# scripts/url_parser.py (Robust, re-based Version)
+
 import re
 
 def parse_shopee_url(url: str) -> dict | None:
     """
-    Parses a Shopee product URL using basic string manipulation, without any libraries.
+    Parses a Shopee product URL robustly using regular expressions.
 
-    It looks for the 'i.shopId.itemId' pattern which is the stable, unique
-    identifier for a product on Shopee.
+    This method is not "hardcoded" to a specific URL structure because it
+    searches for the unique ID pattern (`i.shopId.itemId`) anywhere in the URL string.
 
     Args:
         url: The full Shopee product URL.
@@ -15,157 +16,74 @@ def parse_shopee_url(url: str) -> dict | None:
         A dictionary with parsed components:
         {
             "source_site": "shopee.sg",
-            "source_product_id": "shopId_itemId",
+            "listing_id": "shopId_itemId",
         }
-        Returns None if the URL format is not as expected.
+        Returns None if the URL is not a valid or recognizable Shopee product URL.
     """
-    try:
-        # 1. Basic check to ensure it's a potential Shopee URL
-        if 'shopee' not in url or 'i.' not in url:
-            return None
+    if not url:
+        return None
 
-        # 2. Extract the hostname (e.g., 'shopee.sg')
-        # We split by '//' to get the part after 'https://'
-        # Then we split by '/' to get the first part, which is the host
+    try:
+        # --- 1. Extract the hostname (e.g., 'shopee.sg') using string splitting ---
+        # This part is simple enough that a regex is overkill.
+        # It handles 'http://' and 'https://'
         domain_part = url.split('//')[1]
         source_site = domain_part.split('/')[0]
 
-        # 3. Extract the unique ID part (i.shopId.itemId)
-        # We find the last occurrence of 'i.' to be safe
-        id_start_index = url.rfind('i.')
-        # The identifier string is everything after that
-        identifier_str = url[id_start_index:]
+        # Ensure it's a valid Shopee domain
+        if 'shopee' not in source_site:
+            return None
 
-        # 4. Split the identifier string to get the shop and item IDs
-        id_parts = identifier_str.split('.')
-        # Expected parts: ['i', 'shopId', 'itemId']
-        if len(id_parts) == 3:
-            shop_id = id_parts[1]
-            item_id = id_parts[2]
+        # --- 2. Define a regular expression to find the Shopee ID pattern ---
+        # Pattern Breakdown:
+        #   i\.          - Matches the literal characters "i."
+        #   (\d+)        - This is a "capturing group" that matches one or more digits (the shopId)
+        #   \.           - Matches the literal "."
+        #   (\d+)        - A second capturing group for one or more digits (the itemId)
+        pattern = r"i\.(\d+)\.(\d+)"
+
+        # --- 3. Search for the pattern in the entire URL string ---
+        match = re.search(pattern, url)
+
+        # --- 4. If a match is found, extract the captured groups ---
+        if match:
+            shop_id = match.group(1)  # The first captured group (shopId)
+            item_id = match.group(2)  # The second captured group (itemId)
             
-            # 5. Create our clean, composite ID for the database
-            composite_product_id = f"{shop_id}_{item_id}"
+            # Create our clean, composite ID for the database
+            composite_listing_id = f"{shop_id}_{item_id}"
             
             return {
                 "source_site": source_site,
-                "listing_id": composite_product_id,
+                "listing_id": composite_listing_id,
             }
         
-        # If the format wasn't 'i.shopId.itemId', it's invalid
+        # If the pattern was not found anywhere in the URL, it's invalid
         return None
 
     except (IndexError, AttributeError):
-        # This will catch errors if the URL is malformed and split() doesn't work as expected
-        return None
-
-def extract_url_from_request(request) -> str | None:
-    """
-    Extract product URL from various request formats.
-    
-    Args:
-        request: Flask request object
-        
-    Returns:
-        Product URL if found, None otherwise
-    """
-    try:
-        if request.content_type == 'application/json':
-            data = request.get_json()
-            if data and 'url' in data:
-                return data['url']
-        elif 'text/plain' in request.content_type:
-            raw_data = request.get_data(as_text=True)
-            # Try to extract URL from the text
-            url_match = re.search(r"URL: (https?://.*?)(\s|$|\n)", raw_data)
-            if url_match:
-                return url_match.group(1).strip()
-        return None
-    except Exception:
-        return None
-
-def extract_text_from_request(request) -> str | None:
-    """
-    Extract product text content from various request formats.
-    
-    Args:
-        request: Flask request object
-        
-    Returns:
-        Product text content if found, None otherwise
-    """
-    try:
-        if request.content_type == 'application/json':
-            data = request.get_json()
-            if not data:
-                return None
-                
-            # If plainText is provided, use it directly
-            if 'plainText' in data:
-                return data['plainText']
-            
-            # Otherwise construct from various fields
-            elif 'name' in data or 'brand' in data or 'specifications' in data or 'description' in data:
-                text_parts = []
-                
-                if 'url' in data:
-                    text_parts.append(f"URL: {data['url']}")
-                
-                if 'brand' in data:
-                    text_parts.append(f"Product Brand: {data['brand']}")
-                    
-                if 'name' in data:
-                    text_parts.append(f"Product Name: {data['name']}")
-                
-                # Add specifications
-                if 'specifications' in data and data['specifications']:
-                    specs = data['specifications']
-                    spec_parts = ["Product Specifications:"]
-                    
-                    for spec in specs:
-                        if isinstance(spec, dict) and 'header' in spec and 'text' in spec:
-                            spec_parts.append(f"{spec['header']}: {spec['text']}")
-                        elif isinstance(spec, str):
-                            spec_parts.append(spec)
-                    
-                    text_parts.append('\n'.join(spec_parts))
-                
-                # Add description
-                if 'description' in data and data['description']:
-                    desc = data['description']
-                    desc_parts = ["Product Description:"]
-                    
-                    for d in desc:
-                        if isinstance(d, dict) and 'text' in d:
-                            desc_parts.append(d['text'])
-                        elif isinstance(d, str):
-                            desc_parts.append(d)
-                    
-                    text_parts.append('\n'.join(desc_parts))
-                
-                return '\n'.join(text_parts)
-                
-        elif 'text/plain' in request.content_type:
-            return request.get_data(as_text=True)
-        
-        return None
-    except Exception:
+        # This will catch errors if the URL is malformed and split() fails
         return None
 
 # This block allows you to test the file directly by running `python url_parser.py`
 if __name__ == '__main__':
-    print("--- Testing simple url_parser.py ---")
+    print("--- Testing robust url_parser.py (re version) ---")
     
     test_urls = [
-        "https://shopee.sg/-NEW-PUMA-Unisex-Shuffle-Shoes-(White)-i.341363989.24033132727",
-        "https://shopee.ph/product/12345/67890", # A different format, should fail gracefully
-        "https://shopee.co.id/Some-Product-Name-i.987654321.1234567890",
-        "https://www.google.com" # Not a shopee url
+        # Standard URL with query parameters
+        "https://shopee.sg/-NEW-PUMA-Unisex-Shuffle-Shoes-(White)-i.341363989.24033132727?sp_atk=123",
+        # URL where the ID is NOT at the end (proves robustness)
+        "https://shopee.co.id/Some-Product-Name-i.987654321.1234567890/similar?from=ads",
+        # Invalid Shopee URL format
+        "https://shopee.ph/product/12345/67890",
+        # Not a Shopee URL
+        "https://www.google.com"
     ]
     
     for url in test_urls:
         print(f"\nParsing URL: {url}")
         result = parse_shopee_url(url)
         if result:
-            print("  ✅ Success:", result)
+            print(f"  ✅ Success: {result}")
         else:
             print("  ❌ Failed or Invalid Format")
