@@ -293,3 +293,33 @@ button:active {
   color: var(--color-danger);
   opacity: 1;
 }
+
+/* Senior mode overrides */
+[data-senior="true"] {
+  font-size: 18px;
+  line-height: 1.8;
+  font-family: Arial, sans-serif;
+  background-color: #fff !important;
+  color: #000 !important;
+}
+
+[data-senior="true"] .container {
+  max-width: 900px;
+  padding: 32px;
+}
+
+[data-senior="true"] input,
+[data-senior="true"] select,
+[data-senior="true"] button {
+  font-size: 18px;
+  padding: 12px;
+}
+
+[data-senior="true"] h1,
+[data-senior="true"] h2 {
+  font-size: 26px;
+}
+
+[data-senior="true"] .setting-item {
+  margin-bottom: 24px;
+}

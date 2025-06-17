@@ -18,7 +18,7 @@ let activeConnections = new Map();
 
 // API Base URL
 const API_BASE_URL = 'https://api.lxkhome.duckdns.org'; // Previous public URL
-// const API_BASE_URL = 'http://127.0.0.1:5000'; // For local development
+//const API_BASE_URL = 'http://127.0.0.1:5000'; // For local development
 
 console.log("EcoShop Service Worker initialized, API:", API_BASE_URL);
 
@@ -305,13 +305,7 @@ function monitorTaskWithSSE(taskId, productInfo, sender, sendResponse) {
 async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
   console.log("=== Starting handleSustainabilityCheck (API-first) ===");
   console.log("Product info (raw):", productInfo);
-  const tabId = sender?.tab?.id; // Helper for sending toasts
-
   try {
-    const processingMsg = "EcoShop: Processing product...";
-    if (tabId) sendToastToTab(tabId, processingMsg);
-    console.log(processingMsg, "TabID:", tabId);
-
     // Use plainText if available, else fallback to formatting
     const plainText = productInfo.plainText || (typeof formatAsPlainText === 'function' ? formatAsPlainText(productInfo) : '');
     console.log("Using plainText:", plainText);
@@ -331,12 +325,9 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
     const cacheKey = (productInfo.brand || productInfo.name)?.toLowerCase();
     if (cacheKey && sustainabilityCache[cacheKey]) {
       const data = sustainabilityCache[cacheKey];
-      if (tabId) {
-        updateBadgeForTab(tabId, data.score);
-        tabDataCache[tabId] = data;
-        const cacheMsg = `EcoShop: Found in cache! Score: ${data.score}`;
-        sendToastToTab(tabId, cacheMsg);
-        console.log(cacheMsg);
+      if (sender?.tab?.id) {
+        updateBadgeForTab(sender.tab.id, data.score);
+        tabDataCache[sender.tab.id] = data;
       }
       sendResponse({ success: true, data });
       return;
@@ -344,58 +335,41 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
     
     // 1. Try backend API
     try {
-      const contactingMsg = "EcoShop: Contacting API...";
-      if (tabId) sendToastToTab(tabId, contactingMsg);
-      console.log(contactingMsg);
-
-      const apiData = await fetchFromApi(transformed, productInfo.brand, tabId); // Pass tabId
+      const apiData = await fetchFromApi(transformed, productInfo.brand);
       if (apiData) {
         if (cacheKey) sustainabilityCache[cacheKey] = apiData;
-        if (tabId) {
-          updateBadgeForTab(tabId, apiData.score);
-          tabDataCache[tabId] = apiData;
-          // Toast for API success is handled within fetchFromApi or its success path
+        if (sender?.tab?.id) {
+          updateBadgeForTab(sender.tab.id, apiData.score);
+          tabDataCache[sender.tab.id] = apiData;
+          sendToastToTab(sender.tab.id, `EcoShop: Analysis complete! Score: ${apiData.score}`);
         }
         sendResponse({ success: true, data: apiData });
         return;
       }
     } catch (apiError) {
       console.warn("API call failed, falling back to test score:", apiError);
-      const apiErrMsg = `EcoShop: API Error: ${apiError.message}. Using test score.`;
-      if (tabId) sendToastToTab(tabId, apiErrMsg);
-      console.log(apiErrMsg);
     }
     
     // 2. Fallback: local test score
-    const fallbackMsg = "EcoShop: Generating fallback test score...";
-    if (tabId) sendToastToTab(tabId, fallbackMsg);
-    console.log(fallbackMsg);
-
     const testData = generateTestScore(transformed);
     if (cacheKey) sustainabilityCache[cacheKey] = testData;
-    if (tabId) {
-      updateBadgeForTab(tabId, testData.score);
-      tabDataCache[tabId] = testData;
-      sendToastToTab(tabId, `EcoShop: Test analysis complete! Score: ${testData.score}`);
+    if (sender?.tab?.id) {
+      updateBadgeForTab(sender.tab.id, testData.score);
+      tabDataCache[sender.tab.id] = testData;
+      sendToastToTab(sender.tab.id, `EcoShop: Test analysis complete! Score: ${testData.score}`);
     }
     sendResponse({ success: true, data: testData, status: 'fallback' });
   } catch (error) {
     console.error("Error in handleSustainabilityCheck:", error);
-    const errMsg = `EcoShop: Error: ${error.message}`;
-    if (tabId) sendToastToTab(tabId, errMsg);
-    console.log(errMsg);
     sendResponse({ success: false, error: error.message });
   }
   console.log("=== Completed handleSustainabilityCheck ===");
 }
 
 // Update fetchFromApi to use new structure
-async function fetchFromApi(transformedTextPayload, brandForFallback, tabId) { // Added tabId parameter
+async function fetchFromApi(transformedTextPayload, brandForFallback) {
   try {
     if (!transformedTextPayload || !transformedTextPayload.text) {
-      const noTextMsg = "EcoShop: Error - No product text to send.";
-      if (tabId) sendToastToTab(tabId, noTextMsg);
-      console.log(noTextMsg);
       throw new Error("Missing product information");
     }
 
@@ -428,10 +402,6 @@ async function fetchFromApi(transformedTextPayload, brandForFallback, tabId) { /
     const postApiUrl = cleanApiBaseUrl + '/extract_and_rate';
     
     console.log("Using API endpoint for POST:", postApiUrl);
-    const sendingMsg = `EcoShop: Sending to ${postApiUrl.replace('https://', '')}...`;
-    if (tabId) sendToastToTab(tabId, sendingMsg);
-    console.log(sendingMsg);
-
     console.log("Sending product text:", transformedTextPayload.text);
     console.log("Text length:", transformedTextPayload.text?.length);
     
@@ -453,25 +423,14 @@ async function fetchFromApi(transformedTextPayload, brandForFallback, tabId) { /
       
       console.log("API response status:", response.status);
       console.log("API response ok:", response.ok);
-      const statusMsg = `EcoShop: API Status: ${response.status}`;
-      if (tabId) sendToastToTab(tabId, statusMsg);
-      console.log(statusMsg);
       
       clearTimeout(timeoutId);
       
       if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Could not read error response.');
-        console.error(`API response not OK: ${response.status} - ${response.statusText}. Body: ${errorText}`);
-        const apiErrorMsg = `EcoShop: API Error ${response.status}. Trying fallback.`;
-        if (tabId) sendToastToTab(tabId, apiErrorMsg);
-        console.log(apiErrorMsg);
+        console.error(`API response not OK: ${response.status} - ${response.statusText}`);
         
         // Try simpler brand lookup endpoint
         console.log("Falling back to simple brand lookup");
-        const brandFallbackMsg = "EcoShop: Trying brand lookup fallback...";
-        if (tabId) sendToastToTab(tabId, brandFallbackMsg);
-        console.log(brandFallbackMsg);
-
         const fallbackUrl = cleanApiBaseUrl + `/rate_product?brand=${encodeURIComponent(brandForFallback)}`;
         console.log("Trying fallback GET request to:", fallbackUrl);
         const fallbackResponse = await fetch(fallbackUrl, {
@@ -479,39 +438,23 @@ async function fetchFromApi(transformedTextPayload, brandForFallback, tabId) { /
           mode: 'cors',
           cache: 'no-cache'
         });
-        const fallbackStatusMsg = `EcoShop: Fallback API Status: ${fallbackResponse.status}`;
-        if (tabId) sendToastToTab(tabId, fallbackStatusMsg);
-        console.log(fallbackStatusMsg);
         
         if (!fallbackResponse.ok) {
-          const fallbackErrorText = await fallbackResponse.text().catch(() => 'Could not read fallback error.');
-          const fallbackFailMsg = `EcoShop: Fallback failed ${fallbackResponse.status}.`;
-          if (tabId) sendToastToTab(tabId, fallbackFailMsg);
-          console.log(fallbackFailMsg, "Details:", fallbackErrorText);
-          throw new Error(`Fallback API returned ${fallbackResponse.status}: ${fallbackResponse.statusText}. Body: ${fallbackErrorText} (Original error: ${response.status} - ${response.statusText}. Body: ${errorText})`);
+          throw new Error(`Fallback API returned ${fallbackResponse.status}: ${fallbackResponse.statusText} (Original error: ${response.status} - ${response.statusText})`);
         }
         
         const fallbackData = await fallbackResponse.json();
         console.log("Fallback API response:", fallbackData);
         
         if (fallbackData && fallbackData.success && fallbackData.data) {
-          const fallbackSuccessMsg = `EcoShop: Fallback success! Score: ${fallbackData.data.score}`;
-          if (tabId) sendToastToTab(tabId, fallbackSuccessMsg);
-          console.log(fallbackSuccessMsg);
           return fallbackData.data;
         } else {
-          const fallbackNoDataMsg = "EcoShop: Fallback - no data for brand.";
-          if (tabId) sendToastToTab(tabId, fallbackNoDataMsg);
-          console.log(fallbackNoDataMsg);
-          throw new Error("No data available for this brand from fallback");
+          throw new Error("No data available for this brand");
         }
       }
       
       const responseData = await response.json();
       console.log("API response:", responseData);
-      const receivedMsg = "EcoShop: API response received!";
-      if (tabId) sendToastToTab(tabId, receivedMsg);
-      console.log(receivedMsg);
       
       if (responseData && responseData.success) {
         if (responseData.status === 'found') {
@@ -525,28 +468,17 @@ async function fetchFromApi(transformedTextPayload, brandForFallback, tabId) { /
           return responseData.data;
         }
       }
-      const invalidFormatMsg = "EcoShop: Invalid API response format.";
-      if (tabId) sendToastToTab(tabId, invalidFormatMsg);
-      console.log(invalidFormatMsg);
+      
       throw new Error("Invalid response format from API");
       
     } catch (fetchError) {
       if (fetchError.name === 'AbortError') {
-        const timeoutMsg = "EcoShop: API request timed out.";
-        if (tabId) sendToastToTab(tabId, timeoutMsg);
-        console.log(timeoutMsg);
         throw new Error("API request timed out");
       }
-      const fetchErrorMsg = `EcoShop: Fetch Error: ${fetchError.message}`;
-      if (tabId) sendToastToTab(tabId, fetchErrorMsg);
-      console.log(fetchErrorMsg, fetchError);
       throw fetchError;
     }
   } catch (error) {
     console.error("API fetch error:", error);
-    const apiSetupErrorMsg = `EcoShop: API Setup Error: ${error.message}`;
-    if (tabId) sendToastToTab(tabId, apiSetupErrorMsg);
-    console.log(apiSetupErrorMsg, error);
     throw error;
   }
 }

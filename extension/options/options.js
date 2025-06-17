@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const showAlternativesCheckbox = document.getElementById('show-alternatives');
   const badgePositionSelect = document.getElementById('badge-position');
   const darkModeCheckbox = document.getElementById('dark-mode');
-    const apiEndpointInput = document.getElementById('api-endpoint');
+  const apiEndpointInput = document.getElementById('api-endpoint');
   const dataContributionCheckbox = document.getElementById('data-contribution');
   
   const restoreDefaultsButton = document.getElementById('restore-defaults');
@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', function() {
     wasteWeight: 3,
     laborWeight: 3,
     showBadge: true,
+    seniorMode: false,
     showAlternatives: true,
     badgePosition: 'bottom-right',
     darkMode: true,
@@ -58,6 +59,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }
   
+  function applySeniorMode(enabled) {
+    document.documentElement.setAttribute('data-senior', enabled ? 'true' : 'false');
+  }
+
+
   // Update display when sliders change
   carbonWeightInput.addEventListener('input', () => {
     carbonWeightValue.textContent = carbonWeightInput.value;
@@ -99,7 +105,9 @@ document.addEventListener('DOMContentLoaded', function() {
       showAlternatives: showAlternativesCheckbox.checked,
       badgePosition: badgePositionSelect.value,      darkMode: darkModeCheckbox.checked,
       apiEndpoint: apiEndpointInput.value.trim(),
-      dataContribution: dataContributionCheckbox.checked
+      dataContribution: dataContributionCheckbox.checked,
+      seniorMode: document.getElementById('senior-mode').checked
+
     };
     
     // Save both 'settings' object and the separate 'darkMode' setting for easier access
@@ -109,6 +117,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }, () => {
       showStatus('Settings saved successfully!', 'success');
       
+      applySeniorMode(settings.seniorMode);
+
       // Notify the service worker that settings have changed
       chrome.runtime.sendMessage({ 
         action: "settingsUpdated", 
@@ -142,9 +152,11 @@ document.addEventListener('DOMContentLoaded', function() {
       showAlternativesCheckbox.checked = settings.showAlternatives;
       badgePositionSelect.value = settings.badgePosition;
       darkModeCheckbox.checked = darkMode;
-        apiEndpointInput.value = settings.apiEndpoint || '';
+      apiEndpointInput.value = settings.apiEndpoint || '';
       dataContributionCheckbox.checked = settings.dataContribution;
-      
+      document.getElementById('senior-mode').checked = settings.seniorMode;
+      applySeniorMode(settings.seniorMode);
+
       // Apply dark mode if enabled
       setTheme(darkMode);
     });
@@ -172,6 +184,8 @@ document.addEventListener('DOMContentLoaded', function() {
       apiEndpointInput.value = defaultSettings.apiEndpoint;
     dataContributionCheckbox.checked = defaultSettings.dataContribution;
     
+    applySeniorMode(defaultSettings.seniorMode);
+
     setTheme(defaultSettings.darkMode);
     
     showStatus('Default settings restored. Click Save to apply.', 'success');

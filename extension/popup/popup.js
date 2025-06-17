@@ -1,6 +1,15 @@
 // EcoShop Popup Script
 document.addEventListener('DOMContentLoaded', function() {
   // Elements
+  chrome.storage.sync.get(['settings'], (data) => {
+  const seniorEnabled = data.settings?.seniorMode === true;
+  document.documentElement.setAttribute('data-senior', seniorEnabled ? 'true' : 'false');
+  console.log('✅ Applied senior mode:', seniorEnabled);
+  console.log('🔎 Final attribute:', document.documentElement.getAttribute('data-senior'));
+});
+
+
+
   const loadingElement = document.getElementById('loading');
   const noProductElement = document.getElementById('no-product');
   const productInfoElement = document.getElementById('product-info');
@@ -256,4 +265,7 @@ document.addEventListener('DOMContentLoaded', function() {
   learnMoreButton.addEventListener('click', () => {
     window.open('https://example.com/about-sustainability-metrics', '_blank');
   });
+
+  
+
 });

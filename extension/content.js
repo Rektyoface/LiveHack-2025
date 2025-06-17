@@ -45,25 +45,24 @@
   
   // Check if current page is a product page by looking for product sections
   function isProductPage() {
-    // Define indicators, from most reliable to less reliable
+    // Look for indicators that this is a product page
     const productIndicators = [
-      // Shopee-specific selectors (high confidence)
-      () => document.querySelector('.YPqix5'), // Product name selector
-      () => document.querySelector('.qPNIqx'), // Brand selector
-      // Robust text combination (high confidence)
-      () => {
-        const bodyText = document.body.textContent;
-        return bodyText.includes('Category') && bodyText.includes('Brand') && bodyText.includes('Stock');
-      },
-      // Common product page sections/text (medium confidence)
-      // Check for text first as querySelector can be slow if run many times
+      // Text-based indicators
       () => document.body.textContent.includes('Product Specifications'),
-      () => document.querySelector('.product-specs, .specifications, .product-specifications')
-      // Removed overly generic indicators like:
-      // - textContent.includes('Product Details')
-      // - textContent.includes('Product Description')
-      // - querySelector('.product-details, .details, .product-info')
-      // - querySelector('.description, .product-description')
+      () => document.body.textContent.includes('Product Details'),
+      () => document.body.textContent.includes('Product Description'),
+      
+      // Structure-based indicators
+      () => document.querySelector('.product-specs, .specifications, .product-specifications'),
+      () => document.querySelector('.product-details, .details, .product-info'),
+      () => document.querySelector('.description, .product-description'),
+      
+      // Shopee-specific indicators
+      () => document.querySelector('.qPNIqx'), // Brand selector
+      () => document.querySelector('.YPqix5'), // Product name selector
+      () => document.body.textContent.includes('Category') && 
+            document.body.textContent.includes('Brand') && 
+            document.body.textContent.includes('Stock')
     ];
     
     // Check if any indicator matches
@@ -713,17 +712,22 @@
   async function getUserPreferences() {
     return new Promise(resolve => {
       chrome.storage.sync.get(
-        { 
-          'darkMode': true, // Default to dark mode
-          'settings': { badgePosition: 'bottom-right' } // Default position
-        }, 
+        {
+          darkMode: true,
+          settings: {
+            badgePosition: 'bottom-right',
+            seniorMode: false
+          }
+        },
         (result) => resolve({
           darkMode: result.darkMode,
-          badgePosition: result.settings?.badgePosition || 'bottom-right'
+          badgePosition: result.settings?.badgePosition || 'bottom-right',
+          seniorMode: result.settings?.seniorMode ?? false  // 🔐 safe access
         })
       );
     });
   }
+
   
   // Display a sustainability badge on the page
   async function displaySustainabilityBadge(sustainabilityData) {
@@ -736,6 +740,7 @@
     // Get user preferences
     const preferences = await getUserPreferences();
     const darkMode = preferences.darkMode;
+    const seniorMode = preferences.seniorMode;
     
     // Create floating badge
     badge = document.createElement('div');
@@ -759,6 +764,13 @@
         positionStyles = 'bottom: 50px; right: 5px;';
     }
     
+    const fontSize = seniorMode ? '36px' : '32px';
+    const titleSize = seniorMode ? '20px' : '16px';
+    const subtitleSize = seniorMode ? '15px' : '12px';
+    const paddingSize = seniorMode ? '20px' : '15px';
+    const badgeWidth = seniorMode ? '270px' : '240px';
+
+
     badge.style.cssText = `
       position: fixed;
       ${positionStyles}
@@ -766,7 +778,8 @@
       color: ${darkMode ? '#fff' : '#333'};
       border: 2px solid #${getColorForScore(sustainabilityData.score)};
       border-radius: 8px;
-      padding: 15px;
+      padding: ${paddingSize};
+      width: ${badgeWidth};
       z-index: 10000;
       box-shadow: 0 2px 10px rgba(0,0,0,0.3);
       font-family: Arial, sans-serif;
@@ -775,17 +788,18 @@
     `;
     
     badge.innerHTML = `
-      <h3 style="margin: 0 0 10px 0; color: ${darkMode ? '#fff' : '#333'};">Sustainability Score</h3>
-      <div style="font-size: 32px; font-weight: bold; color: #${getColorForScore(sustainabilityData.score)};">
+      <h3 style="margin: 0 0 10px 0; font-size: ${titleSize}; color: ${darkMode ? '#fff' : '#333'};">Sustainability Score</h3>
+      <div style="font-size: ${fontSize}; font-weight: bold; color: #${getColorForScore(sustainabilityData.score)};">
         ${sustainabilityData.score}/100
       </div>
-      <p style="margin: 10px 0 0 0;">
+      <p style="margin: 10px 0 0 0; font-size: ${subtitleSize};">
         Click for details
       </p>
-      <div style="margin-top: 8px; font-size: 12px; color: ${darkMode ? '#ccc' : '#666'};">
+      <div style="margin-top: 8px; font-size: ${subtitleSize}; color: ${darkMode ? '#ccc' : '#666'};">
         Or click the extension icon in the toolbar
       </div>
     `;
+
     
     document.body.appendChild(badge);
     console.log("EcoShop: Badge displayed");
