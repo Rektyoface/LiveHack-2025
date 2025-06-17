@@ -122,10 +122,13 @@ document.addEventListener('DOMContentLoaded', function() {
         let score = typeof metricData.score === 'number' ? metricData.score : undefined;
         // No rebasing: display score directly
         let displayFieldScore = score;
-        let analysis = metricData.analysis || "we could not find data";
-        // Show 'we could not find data' only if value is 'Unknown' or missing AND score is missing/undefined/0
-        if ((value === "Unknown" || !value) && (!score || score === 0)) {
-          value = "we could not find data";
+        // Clamp displayFieldScore to 0-10 for user readability
+        if (typeof displayFieldScore === 'number') {
+          displayFieldScore = Math.max(0, Math.min(10, displayFieldScore));
+        }
+        // Show 'We could not find data' only if value is 'Unknown' or missing AND score is missing/undefined/-1/0
+        if ((value === "Unknown" || !value) && (score === undefined || score === -1 || score === 0)) {
+          value = "We could not find data";
         }
         // Show 'Unknown' if score is -1
         let ratingText = (score === -1) ? '(Rating: Unknown --/10)' : (typeof displayFieldScore === 'number' ? `(Rating: ${displayFieldScore}/10)` : (score === 0 ? '(Rating: 0/10)' : '(Rating: --/10)'));
