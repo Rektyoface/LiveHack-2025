@@ -17,8 +17,8 @@ let tabDataCache = {};
 let activeConnections = new Map();
 
 // API Base URL
-// const API_BASE_URL = 'https://api.lxkhome.duckdns.org'; // Previous public URL
-const API_BASE_URL = 'http://127.0.0.1:5000'; // For local development
+const API_BASE_URL = 'https://api.lxkhome.duckdns.org'; // Previous public URL
+// const API_BASE_URL = 'http://127.0.0.1:5000'; // For local development
 
 console.log("EcoShop Service Worker initialized, API:", API_BASE_URL);
 
