@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 @dataclass
 class Product:
@@ -6,7 +6,11 @@ class Product:
     brandID: int
     ecoScore: int
     additionalInfo: str
-    itemIdentifier: int
+    itemIdentifier: int = field(init=False)  # prevent manual setting
+
+    def __post_init__(self):
+        # Automatically set itemIdentifier as concatenation of brandID and productID
+        self.itemIdentifier = int(f"{self.brandID}{self.productID}")
 
     def to_dict(self):
         return {
