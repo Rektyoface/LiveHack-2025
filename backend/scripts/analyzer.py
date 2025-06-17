@@ -64,4 +64,8 @@ def get_full_product_analysis(raw_text: str) -> dict | None:
         return json.loads(chat_completion.choices[0].message.content)
     except Exception as e:
         print(f"An error occurred during LLM analysis: {e}")
-        return None
+        # Return a structured error dictionary instead of None
+        return {
+            "error": "LLM analysis failed.",
+            "details": str(e)
+        }
