@@ -100,9 +100,7 @@ def get_full_product_analysis(raw_text: str) -> dict | None:
     Your task is to analyze the following product information.
     First, use the provided text.
     Then, use your `google_search` tool to find any missing information, especially about the brand's reputation, labor practices, and specific material details.
-    Once you have gathered and synthesized all the information, you MUST call the `submit_sustainability_analysis` function with the complete, final analysis.
-
-    Here is the product text dump:
+    Once you have gathered and synthesized all the information, you MUST call the `submit_sustainability_analysis` function with the complete, final analysis.    Here is the product text dump:
     ---
     {raw_text}
     ---
@@ -114,7 +112,7 @@ def get_full_product_analysis(raw_text: str) -> dict | None:
             prompt,
             tool_config={'function_calling_config': {'mode': 'any', 'allowed_function_names': ['submit_sustainability_analysis']}}
         )
-
+        
         # The result is not in response.text, but in the function_calls part of the response
         function_call = response.candidates[0].content.parts[0].function_call
         
@@ -122,12 +120,24 @@ def get_full_product_analysis(raw_text: str) -> dict | None:
             # The arguments of the function call are our structured data!
             analysis_args = function_call.args
             
+            # Helper function to recursively convert MapComposite objects to regular dicts
+            def convert_to_dict(obj):
+                if hasattr(obj, '__iter__') and hasattr(obj, 'keys'):
+                    # This is a MapComposite or similar dict-like object
+                    return {key: convert_to_dict(value) for key, value in obj.items()}
+                elif isinstance(obj, (list, tuple)):
+                    # This is a list or tuple
+                    return [convert_to_dict(item) for item in obj]
+                else:
+                    # This is a primitive value
+                    return obj
+            
             # Convert the arguments (which are in a special format) to a standard Python dictionary
             final_json = {
-                "product_name": analysis_args.get("product_name"),
-                "brand": analysis_args.get("brand"),
-                "category": analysis_args.get("category"),
-                "sustainability_analysis": dict(analysis_args.get("sustainability_analysis")),
+                "product_name": convert_to_dict(analysis_args.get("product_name")),
+                "brand": convert_to_dict(analysis_args.get("brand")),
+                "category": convert_to_dict(analysis_args.get("category")),
+                "sustainability_analysis": convert_to_dict(analysis_args.get("sustainability_analysis")),
             }
             return final_json
         else:
@@ -136,6 +146,5 @@ def get_full_product_analysis(raw_text: str) -> dict | None:
     except Exception as e:
         print(f"An error occurred during Google Gemini API analysis: {e}")
         return {
-            "error": "LLM analysis failed.",
-            "details": str(e)
+            "error": "LLM analysis failed.",            "details": str(e)
         }

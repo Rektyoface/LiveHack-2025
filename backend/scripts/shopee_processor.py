@@ -126,14 +126,25 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
     if not analysis_json:
         logger.error("FAILED: LLM analysis returned no data")
         return None
-    
-    logger.info("SUCCESS: LLM analysis completed")
-    logger.info(f"Analysis result: {json.dumps(analysis_json, indent=2)}")
 
-    # 4b. Convert the LLM's text analysis into our rich breakdown object
-    logger.info("=== STEP 4B: GENERATING SUSTAINABILITY BREAKDOWN ===")
+    logger.info("SUCCESS: LLM analysis completed")
+    # Safe logging with error handling for non-serializable objects
+    try:
+        logger.info(f"Analysis result: {json.dumps(analysis_json, indent=2)}")
+    except (TypeError, ValueError) as e:
+        logger.warning(f"Could not serialize analysis_json for logging: {e}")
+        logger.info(f"Analysis result keys: {list(analysis_json.keys()) if isinstance(analysis_json, dict) else 'Not a dict'}")
+        logger.info(f"Analysis result type: {type(analysis_json)}")
+
+    # 4b. Convert the LLM's text analysis into our rich breakdown object    logger.info("=== STEP 4B: GENERATING SUSTAINABILITY BREAKDOWN ===")
     sustainability_breakdown = generate_sustainability_breakdown(analysis_json)
-    logger.info(f"Sustainability breakdown: {json.dumps(sustainability_breakdown, indent=2)}")
+    # Safe logging with error handling for non-serializable objects
+    try:
+        logger.info(f"Sustainability breakdown: {json.dumps(sustainability_breakdown, indent=2)}")
+    except (TypeError, ValueError) as e:
+        logger.warning(f"Could not serialize sustainability_breakdown for logging: {e}")
+        logger.info(f"Sustainability breakdown keys: {list(sustainability_breakdown.keys()) if isinstance(sustainability_breakdown, dict) else 'Not a dict'}")
+        logger.info(f"Sustainability breakdown type: {type(sustainability_breakdown)}")
 
     # 4c. Calculate the default score that will be stored permanently in the database
     logger.info("=== STEP 4C: CALCULATING DEFAULT SCORE ===")
@@ -149,9 +160,14 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         "brand": analysis_json.get('brand', 'N/A'),
         "category": analysis_json.get('product_category', 'Unknown'),
         "sustainability_breakdown": sustainability_breakdown,
-        "default_sustainability_score": default_score_for_db,
-    }
-    logger.info(f"Document to insert: {json.dumps(product_document, indent=2)}")
+        "default_sustainability_score": default_score_for_db,    }
+    # Safe logging with error handling for non-serializable objects
+    try:
+        logger.info(f"Document to insert: {json.dumps(product_document, indent=2)}")
+    except (TypeError, ValueError) as e:
+        logger.warning(f"Could not serialize product_document for logging: {e}")
+        logger.info(f"Document keys: {list(product_document.keys()) if isinstance(product_document, dict) else 'Not a dict'}")
+        logger.info(f"Document type: {type(product_document)}")
 
     # 4e. Save the new document to the database
     logger.info("=== STEP 4E: SAVING TO DATABASE ===")
@@ -181,6 +197,45 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         return response_document
     
     except Exception as e:
-        logger.error(f"FAILED: Could not insert document into MongoDB: {e}")
-        logger.error(f"Document that failed to insert: {json.dumps(product_document, indent=2)}")
-        return None
+        # Check if this is a duplicate key error
+        if "E11000 duplicate key error" in str(e):
+            logger.warning(f"DUPLICATE KEY: Product already exists in database. Treating as cache hit.")
+            logger.info("Fetching existing product from database...")
+              # Extract the duplicate key information and fetch the existing document
+            existing_doc = products_collection.find_one({
+                "source_site": parsed_info['source_site'],
+                "listing_id": parsed_info['listing_id']
+            })
+            
+            if existing_doc:
+                # Calculate personalized score using the existing sustainability breakdown
+                logger.info("Calculating personalized score for existing product...")
+                personalized_score = calculate_weighted_score(
+                    existing_doc['sustainability_breakdown'], 
+                    user_weights
+                )
+                
+                # Prepare response document
+                existing_doc['sustainability_score'] = personalized_score
+                
+                # Clean up the document before returning
+                if 'default_sustainability_score' in existing_doc:
+                    del existing_doc['default_sustainability_score']
+                
+                logger.info("SUCCESS: Process completed (DUPLICATE -> CACHE HIT)")
+                logger.info(f"Returning existing product with personalized score: {personalized_score}")
+                return existing_doc
+            else:
+                logger.error("FAILED: Could not fetch existing product after duplicate key error")
+                return None
+        else:
+            # Handle other database errors
+            logger.error(f"FAILED: Could not insert document into MongoDB: {e}")
+            # Safe logging with error handling for non-serializable objects
+            try:
+                logger.error(f"Document that failed to insert: {json.dumps(product_document, indent=2)}")
+            except (TypeError, ValueError) as json_error:
+                logger.warning(f"Could not serialize product_document for logging: {json_error}")
+                logger.error(f"Document keys: {list(product_document.keys()) if isinstance(product_document, dict) else 'Not a dict'}")
+                logger.error(f"Document type: {type(product_document)}")
+            return None
