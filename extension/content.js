@@ -2,258 +2,657 @@
 (function() {
   // Flag to prevent repeated error toasts
   let hasShownErrorToast = false;
-    // Flag to prevent multiple requests for the same page
+  // Flag to prevent multiple requests for the same page
   let hasRequestedData = false;
-  
-  // Reset flag when page URL changes (for single-page apps)
+  // Track extracted product to prevent repeated extraction
+  let lastExtractedProduct = null;
+    // Reset flag when page URL changes (for single-page apps)
   let currentUrl = window.location.href;
   setInterval(() => {
     if (window.location.href !== currentUrl) {
       currentUrl = window.location.href;
       hasRequestedData = false;
       hasShownErrorToast = false;
-      console.log("EcoShop: Page URL changed, resetting flags");
+      lastExtractedProduct = null;
+      console.log("EcoShop: Page URL changed, resetting flags and re-initializing observer");
+      
+      // Reset the observer
+      if (window.ecoshopObserver) {
+        window.ecoshopObserver.disconnect();
+      }
+      
+      // Wait for the DOM to update after navigation before setting up observer and first extraction
+      setTimeout(() => {
+        // Try initial extraction
+        const productInfo = extractProductInfo();
+        if (productInfo && (productInfo.brand || productInfo.name)) {
+          sendToServiceWorker(productInfo);
+        } else {
+          // If initial extraction fails, set up observer for dynamic content loading
+          if (window.ecoshopObserver) {
+            window.ecoshopObserver.observe(document.body, {
+              childList: true,
+              subtree: true,
+              attributes: false,
+              characterData: false
+            });
+            console.log("EcoShop: Observer reinitialized after URL change");
+          }
+        }
+      }, 1000);
     }
   }, 1000);
   
-  // Extract product information based on the current website
-  function extractProductInfo() {
+  // Check if current page is a product page by looking for product sections
+  function isProductPage() {
+    // Look for indicators that this is a product page
+    const productIndicators = [
+      // Text-based indicators
+      () => document.body.textContent.includes('Product Specifications'),
+      () => document.body.textContent.includes('Product Details'),
+      () => document.body.textContent.includes('Product Description'),
+      
+      // Structure-based indicators
+      () => document.querySelector('.product-specs, .specifications, .product-specifications'),
+      () => document.querySelector('.product-details, .details, .product-info'),
+      () => document.querySelector('.description, .product-description'),
+      
+      // Shopee-specific indicators
+      () => document.querySelector('.qPNIqx'), // Brand selector
+      () => document.querySelector('.YPqix5'), // Product name selector
+      () => document.body.textContent.includes('Category') && 
+            document.body.textContent.includes('Brand') && 
+            document.body.textContent.includes('Stock')
+    ];
+    
+    // Check if any indicator matches
+    for (const indicator of productIndicators) {
+      try {
+        if (indicator()) {
+          console.log("EcoShop: Detected product page");
+          return true;
+        }
+      } catch (e) {
+        // Ignore errors from selectors
+      }
+    }
+    
+    console.log("EcoShop: Not a product page");
+    return false;
+  }  function extractProductInfo() {
     const url = window.location.hostname;
     let productInfo = {
       brand: null,
       name: null,
-      url: window.href,
-      specifications: {} // New field for detailed specifications
+      url: window.location.href,
+      specifications: [], // For Product Specifications
+      description: [] // For Product Description
     };
     
-    // Focus only on Shopee as requested
+    // Only extract if this is a supported site AND a product page
     if (url.includes('shopee.sg') || url.includes('shopee.com')) {
       console.log("EcoShop: Detected Shopee website");
       
-      // Updated selectors for Shopee (more comprehensive)
-      // Try various potential selectors that might contain brand information
-      const brandSelectors = [
-        '.qPNIqx', // Original selector
-        '[data-testid="shopBrandName"]',
-        '.shop-name',
-        '.seller-name',
-        '.brand-name',
-        '.qPNIqx span', // Child elements
-        '.item-brand',
-        '.product-brand'
-      ];
+      // Check if this is actually a product page
+      if (!isProductPage()) {
+        console.log("EcoShop: Not a product page, skipping extraction");
+        return null;
+      }
       
-      // Try various selectors for product name
+      // Extract product name
       const nameSelectors = [
-        '.YPqix5', // Original selector
+        '.YPqix5', 
         '.product-name',
         '.product-title',
         '.item-name',
         '.product-detail__name',
-        'h1', // Often product names are in h1 tags
-        '[data-testid="productTitle"]'
+        'h1' 
       ];
       
-      // Try each potential brand selector
-      for (const selector of brandSelectors) {
-        const element = document.querySelector(selector);
-        if (element && element.textContent?.trim()) {
-          productInfo.brand = element.textContent.trim();
-          console.log("EcoShop: Found brand using selector", selector, productInfo.brand);
-          break;
-        }
-      }
-      
-      // Try each potential name selector
       for (const selector of nameSelectors) {
         const element = document.querySelector(selector);
         if (element && element.textContent?.trim()) {
           productInfo.name = element.textContent.trim();
-          console.log("EcoShop: Found product name using selector", selector, productInfo.name);
+          console.log("EcoShop: Found product name", productInfo.name);
           break;
         }
-      }
+      }      // Extract brand name (shop name)
+      const brandSelectors = [
+        '.fV3TIn',  // Shopee shop name class
+        '.qPNIqx', 
+        '[data-testid="shopBrandName"]',
+        '.shop-name',
+        '.seller-name',
+        '.brand-name'
+      ];
       
-      // NEW: Extract detailed product specifications
-      extractProductSpecifications(productInfo);
-    }
-    
-    // Fallback method if specific selectors fail
-    if (!productInfo.brand || !productInfo.name) {
-      // Try meta tags
-      const metaBrand = document.querySelector('meta[property="product:brand"]')?.content ||
-                        document.querySelector('meta[property="og:brand"]')?.content;
-      const metaName = document.querySelector('meta[property="og:title"]')?.content;
-      
-      if (metaBrand) {
-        productInfo.brand = metaBrand;
-        console.log("EcoShop: Found brand using meta tags", productInfo.brand);
-      }
-      if (metaName) {
-        productInfo.name = metaName;
-        console.log("EcoShop: Found name using meta tags", productInfo.name);
-      }
-        // If brand is still not found but we have a name, try to extract brand from title
-      if (!productInfo.brand && productInfo.name) {
-        // Check for known brands in the product name
-        const knownBrands = ["Bose", "Sony", "Apple", "Samsung", "Nike", "Adidas", "Xiaomi", "Huawei", "Dell", "HP", "Asus", "Acer"];
-        
-        for (const brand of knownBrands) {
-          if (productInfo.name.includes(brand)) {
-            productInfo.brand = brand;
-            console.log("EcoShop: Found known brand in name", productInfo.brand);
+      for (const selector of brandSelectors) {
+        const element = document.querySelector(selector);
+        if (element && element.textContent?.trim()) {
+          let brandText = element.textContent.trim();
+          
+          // Clean up shop name - remove "Active xx mins ago" or similar patterns
+          if (selector === '.fV3TIn') {
+            console.log("EcoShop: Raw shop text:", brandText);
+            
+            // Remove "Active" followed by time patterns
+            brandText = brandText.replace(/Active\s+\d+\s+(min|mins|minute|minutes|hour|hours|hr|hrs|day|days|second|seconds|sec|secs)\s+ago/gi, '').trim();
+            
+            // Remove any trailing time indicators
+            brandText = brandText.replace(/\s+\d+\s+(min|mins|minute|minutes|hour|hours|hr|hrs|day|days|second|seconds|sec|secs)\s+ago$/gi, '').trim();
+            
+            // Remove any remaining "Active" text at start or end
+            brandText = brandText.replace(/^Active\s*/gi, '').replace(/\s*Active$/gi, '').trim();
+            
+            // If there are multiple lines/parts, take the first substantial part (likely the shop name)
+            const parts = brandText.split(/\n|\s{2,}/).filter(part => part.trim().length > 0);
+            if (parts.length > 0) {
+              brandText = parts[0].trim();
+            }
+            
+            console.log("EcoShop: Cleaned shop text:", brandText);
+          }
+          
+          if (brandText && brandText.length > 0) {
+            productInfo.brand = brandText;
+            console.log("EcoShop: Found brand/shop name", productInfo.brand);
             break;
           }
         }
-        
-        // If still no brand found, try to handle bracket format like "[Brand] Product"
-        if (!productInfo.brand) {
-          const bracketMatch = productInfo.name.match(/\[(.*?)\]/);
-          if (bracketMatch && bracketMatch[1]) {
-            const bracketContent = bracketMatch[1].trim();
-            // Avoid using phrases like "New", "Sale", etc. as brand names
-            if (bracketContent.length < 15 && !["New", "new", "NEW", "Hot", "Sale", "Latest"].includes(bracketContent)) {
-              productInfo.brand = bracketContent;
-              console.log("EcoShop: Extracted brand from brackets", productInfo.brand);
-            }
-          }
+      }
+        // Fallback: try to extract brand from meta tags
+      if (!productInfo.brand) {
+        const metaBrand = document.querySelector('meta[property="product:brand"]')?.content ||
+                         document.querySelector('meta[property="og:brand"]')?.content;
+        if (metaBrand) {
+          productInfo.brand = metaBrand;
         }
+      }
+      
+      // Fallback: try to extract brand from product name
+      if (!productInfo.brand && productInfo.name) {
+        // Look for common brand patterns in product names
+        const brandPatterns = [
+          /^\[?([A-Z][a-zA-Z0-9\s&]+)\]/i,  // [Brand Name] at start
+          /^([A-Z][a-zA-Z0-9\s&]+)\s+[-]/i,  // Brand Name - Product
+          /^([A-Z][a-zA-Z0-9\s&]{2,15})\s+/i  // First word(s) if capitalized
+        ];
         
-        // If still not found, fall back to first word if capitalized
-        if (!productInfo.brand) {
-          const words = productInfo.name.split(' ');
-          if (words[0] && words[0][0] === words[0][0].toUpperCase() && words[0].length > 2) {
-            productInfo.brand = words[0];
-            console.log("EcoShop: Extracted brand from name", productInfo.brand);
+        for (const pattern of brandPatterns) {
+          const match = productInfo.name.match(pattern);
+          if (match && match[1]) {
+            productInfo.brand = match[1].trim();
+            console.log("EcoShop: Extracted brand from name:", productInfo.brand);
+            break;
           }
         }
       }
+        // Extract Product Specifications section
+      extractProductSection(productInfo, "specifications");
+      
+      // Extract Product Description section
+      extractProductSection(productInfo, "description");
+      
+      // Log the raw extracted data before formatting
+      console.log("EcoShop: Raw extracted product info:", JSON.stringify(productInfo, null, 2));
     }
+    
+    // Helper to format product info as plain text for LLM and backend
+    function formatAsPlainText(info) {
+      let lines = [];
+      lines.push(`URL: ${info.url || ''}`);
+      lines.push(`Product Brand: ${info.brand || ''}`);
+      lines.push(`Product Name: ${info.name || ''}`);
+      
+      // Product Specifications - format as new lines for better readability
+      let specLines = [];
+      if (Array.isArray(info.specifications) && info.specifications.length > 0) {
+        // First check if there's a Category spec and put it first
+        const categorySpec = info.specifications.find(spec => 
+          spec && spec.header && spec.header.toLowerCase() === 'category');
+        
+        if (categorySpec) {
+          specLines.push(`Category: ${categorySpec.text}`);
+        }
+        
+        // Then add all other specs
+        info.specifications.forEach(spec => {
+          if (spec && spec.header && spec.header.toLowerCase() !== 'category' && spec.text) {
+            specLines.push(`${spec.header}: ${spec.text}`);
+          } else if (spec && spec.text && !spec.header) {
+            specLines.push(spec.text);
+          }
+        });
+      }
+      
+      // Join specs with newlines for better structure
+      if (specLines.length > 0) {
+        lines.push(`Product Specifications:\n${specLines.join('\n')}`);
+      } else {
+        lines.push('Product Specifications:');
+      }
+      
+      // Product Description
+      let desc = '';
+      if (Array.isArray(info.description) && info.description.length > 0) {
+        desc = info.description
+          .map(item => (item && item.text) ? item.text : '')
+          .filter(Boolean)
+          .join('\n\n');
+      } else if (typeof info.description === 'object' && info.description && info.description.content) {
+        desc = info.description.content;
+      } else if (typeof info.description === 'string') {
+        desc = info.description;
+      }
+      
+      // Clean up description
+      if (desc) {
+        desc = desc.replace(/\xa0/g, ' ')
+                   .replace(/\s+/g, ' ')
+                   .replace(/\n\s*\n/g, '\n')
+                   .trim();
+      }
+      
+      lines.push(`Product Description: ${desc || 'No description available'}`);
+      
+      // Log what we're generating
+      console.log("EcoShop: formatAsPlainText generated:", lines);
+      
+      return lines.join('\n');
+    }
+    
+    productInfo.plainText = formatAsPlainText(productInfo);
+    console.log("EcoShop: Generated plainText:", productInfo.plainText);
     
     console.log("EcoShop extracted product info:", productInfo);
     return productInfo;
   }
-  
-  // NEW FUNCTION: Extract product specifications
-  function extractProductSpecifications(productInfo) {
-    console.log("EcoShop: Attempting to extract product specifications");
+    // Extract specific product section (specifications, details, or description)
+  function extractProductSection(productInfo, sectionType) {
+    // Define selectors based on section type
+    let headings, sectionSelectors;
     
-    // Look for the product specifications section
-    const specSectionSelectors = [
-      'div.product-detail',
-      '.product-specs',
-      '.product-specifications',
-      '.product-info',
-      // The section often has 'specifications' in the heading
-      'div:has(> div:contains("Product Specifications"))',
-      'div:has(> div:contains("Specifications"))',
-      'section:has(> h2:contains("Specifications"))'
-    ];
+    if (sectionType === "specifications") {
+      headings = ["Product Specifications", "Specifications", "Specs"];
+      sectionSelectors = ['.product-specs', '.specifications', '.product-specifications', '.spec-section'];
+    } else if (sectionType === "description") {
+      headings = ["Description", "Overview", "Summary", "Product Description"];
+      sectionSelectors = ['.description', '.product-description', '.desc', '.overview'];
+    }
     
-    let specSection = null;
-    for (const selector of specSectionSelectors) {
-      try {
+    // Try to find the section container
+    let sectionContainer = null;
+    
+    // First try: look for headings that contain our target text
+    for (const heading of headings) {
+      // Try to find heading elements
+      const headingSelectors = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', '.heading', '.title', 'div', 'span'];
+      
+      for (const selector of headingSelectors) {
+        const elements = Array.from(document.querySelectorAll(selector));
+        for (const el of elements) {
+          const text = el.textContent?.trim();
+          if (text && (text === heading || text.includes(heading))) {
+            console.log(`EcoShop: Found ${sectionType} heading:`, text);
+            
+            // For specifications, look for the parent container that has the data
+            if (sectionType === "specifications") {
+              // Try to find the container with all the spec rows
+              let parent = el.parentElement;
+              while (parent && parent !== document.body) {
+                const rows = parent.querySelectorAll('div, tr, li');
+                if (rows.length > 3) { // Likely contains the spec data
+                  sectionContainer = parent;
+                  break;
+                }
+                parent = parent.parentElement;
+              }
+            } else {
+              // For details/description, get the next sibling or parent container
+              sectionContainer = el.nextElementSibling || el.parentElement;
+              // Sometimes we need to go up to find the content container
+              if (sectionContainer && sectionContainer.textContent.trim().length < 100) {
+                sectionContainer = sectionContainer.parentElement;
+              }
+            }
+            
+            if (sectionContainer) {
+              console.log(`EcoShop: Found ${sectionType} section via heading:`, heading);
+              break;
+            }
+          }
+        }
+        if (sectionContainer) break;
+      }
+      if (sectionContainer) break;
+    }
+    
+    // Second try: look for sections with specific class names
+    if (!sectionContainer) {
+      for (const selector of sectionSelectors) {
         const element = document.querySelector(selector);
         if (element) {
-          console.log("EcoShop: Found spec section using selector", selector);
-          specSection = element;
+          sectionContainer = element;
+          console.log(`EcoShop: Found ${sectionType} section via selector:`, selector);
           break;
         }
-      } catch (e) {
-        console.log("EcoShop: Error with selector", selector, e);
       }
     }
     
-    if (!specSection) {
-      // Try finding spec tables directly
-      const specTableSelectors = [
-        'table.product-info-table', 
-        '.specification-table',
-        'table.specs',
-        // Shopee often has spec rows as div pairs
-        '.product-detail div.flex'
-      ];
+    // Third try: For specifications, look for common patterns in Shopee
+    if (!sectionContainer && sectionType === "specifications") {
+      // Look for elements that might contain "Category", "Brand", "Stock" etc.
+      const possibleContainers = document.querySelectorAll('div, section');
+      for (const container of possibleContainers) {
+        const text = container.textContent;
+        if (text.includes('Category') && text.includes('Brand') && text.includes('Stock')) {
+          sectionContainer = container;
+          console.log('EcoShop: Found specifications via content pattern');
+          break;
+        }
+      }
+    }
+    
+    // If we're looking for description on Shopee, use special logic
+    if (!sectionContainer && sectionType === "description" && 
+        (window.location.hostname.includes('shopee.sg') || window.location.hostname.includes('shopee.com'))) {
+      sectionContainer = extractShopeeDescription();
+    }
+    
+    // If we found a section, extract its content
+    if (sectionContainer) {
+      const sectionData = sectionType === "specifications" ? 
+        productInfo.specifications : 
+        productInfo.description;
       
-      for (const selector of specTableSelectors) {
-        try {
-          const elements = document.querySelectorAll(selector);
-          if (elements && elements.length > 0) {
-            console.log("EcoShop: Found spec elements using selector", selector);
-            processSpecElements(elements, productInfo);
-            break;
-          }
-        } catch (e) {
-          console.log("EcoShop: Error with table selector", selector, e);
+      if (sectionType === "specifications") {
+        // For specifications, extract key-value pairs (improved logic)
+        extractShopeeSpecificationPairs(sectionContainer, sectionData);
+      } else {
+        // For description, extract the text content
+        const text = sectionContainer.textContent.trim();
+        if (text && text.length > 10) {
+          // Remove redundant whitespace in the description
+          const cleanedText = text.replace(/\s+/g, ' ').trim();
+          sectionData.push({ header: 'Content', text: cleanedText });
+          console.log(`EcoShop: Extracted ${sectionType} content (${cleanedText.length} chars)`);
         }
       }
     } else {
-      // Process the found spec section
-      const rows = specSection.querySelectorAll('tr, .flex, .row, div.flex');
-      processSpecElements(rows, productInfo);
+      console.log(`EcoShop: Could not find ${sectionType} section`);
+    }
+  }
+  
+  // Special function to extract description from Shopee product pages
+  function extractShopeeDescription() {
+    console.log("EcoShop: Attempting specialized Shopee description extraction");
+    
+    // Most Shopee descriptions are in either:
+    // 1. Tab panels with description content
+    // 2. Large text blocks below specifications
+    // 3. Product detail sections with multiple paragraphs
+    
+    // APPROACH 1: Find tab panels that might contain description
+    const tabContainers = document.querySelectorAll('[role="tabpanel"], [class*="product-detail__content"], [class*="product-detail-tab"], [class*="detail-content"]');
+    
+    for (const tab of tabContainers) {
+      // Skip if it has specification-like content
+      const tabText = tab.textContent.trim();
+      
+      // Skip tabs that are clearly not description (they contain specs-like content)
+      if (tabText.includes('Category:') && tabText.includes('Brand:') && tabText.includes('Stock:')) {
+        continue;
+      }
+      
+      // Skip tabs with short content or that are clearly not descriptions
+      if (tabText.length < 50 || 
+          tabText.includes('Add to Cart') || 
+          tabText.includes('Buy Now') ||
+          tabText.includes('View shop')) {
+        continue;
+      }
+      
+      console.log(`EcoShop: Found potential description in tab panel (${tabText.length} chars)`);
+      return tab;
     }
     
-    // If we still don't have brand in our specs but have it in the main product info, add it
-    if (productInfo.brand && !productInfo.specifications.brand) {
-      productInfo.specifications.brand = productInfo.brand;
+    // APPROACH 2: Look for large text blocks (paras with substantial text)
+    let longestParagraph = null;
+    let maxLength = 100; // Minimum threshold for description length
+    
+    const paragraphs = document.querySelectorAll('p, div > div:not(:has(*)), [class*="description"]');
+    for (const para of paragraphs) {
+      const text = para.textContent.trim();
+      
+      // Skip elements that are likely not description
+      if (text.includes('Category:') || text.includes('Brand:') || 
+          text.includes('Add to Cart') || text.includes('Buy Now')) {
+        continue;
+      }
+      
+      if (text.length > maxLength) {
+        maxLength = text.length;
+        longestParagraph = para;
+        console.log(`EcoShop: Found potential description paragraph (${text.length} chars)`);
+      }
     }
     
-    // Also try looking for key-value pairs directly in the DOM
-    const allElements = document.querySelectorAll('div, section, article');
-    for (const element of allElements) {
-      const text = element.textContent?.trim();
-      // Check if this might be a spec label
-      if (text && (text.includes(':') || text.includes('Brand') || text.includes('Category'))) {
-        const children = element.children;
-        if (children && children.length === 2) {
-          const label = children[0].textContent?.trim();
-          const value = children[1].textContent?.trim();
+    if (longestParagraph) {
+      return longestParagraph;
+    }
+    
+    // APPROACH 3: Look for any containers with substantial text content
+    const potentialContainers = Array.from(document.querySelectorAll('div')).filter(div => {
+      const text = div.textContent.trim();
+      const childElementCount = div.childElementCount;
+      
+      // Good candidates have substantial text but not too many child elements
+      return text.length > 100 && 
+             childElementCount < 10 && 
+             !text.includes('Category:') &&
+             !text.includes('Brand:') &&
+             !text.includes('Add to Cart');
+    });
+    
+    // Sort by text length (descending)
+    potentialContainers.sort((a, b) => 
+      b.textContent.trim().length - a.textContent.trim().length);
+    
+    if (potentialContainers.length > 0) {
+      console.log(`EcoShop: Found potential description container with ${potentialContainers[0].textContent.trim().length} chars`);
+      return potentialContainers[0];
+    }
+    
+    console.log("EcoShop: Could not find specific description element");
+    return null;
+  }
+  
+  // Helper function to extract Shopee specification key-value pairs
+  function extractShopeeSpecificationPairs(container, sectionArr) {
+    console.log("EcoShop: Extracting Shopee specifications from", container);
+    
+    // STRATEGY 1: Try grid-based layout (typical Shopee specs)
+    // Find all rows (each row is a flex or grid container)
+    const rows = Array.from(container.querySelectorAll(':scope > div'));
+    console.log("EcoShop: Found " + rows.length + " potential spec rows");
+    
+    for (const row of rows) {
+      const children = Array.from(row.children);
+      if (children.length < 2) continue;
+      
+      const headerEl = children[0];
+      const valueEl = children[1];
+      const header = headerEl.textContent.trim();
+      
+      // Special handling for Category row (breadcrumb)
+      if (header.toLowerCase() === 'category') {
+        let categoryParts = [];
+        // Look for links (Shopee uses links for category breadcrumbs)
+        const links = valueEl.querySelectorAll('a');
+        if (links.length > 0) {
+          for (const link of links) {
+            categoryParts.push(link.textContent.trim());
+          }
+        } else {
+          // Fallback: check for arrow icons between text nodes
+          for (const node of valueEl.childNodes) {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              if (node.tagName === 'A' || node.tagName === 'SPAN') {
+                categoryParts.push(node.textContent.trim());
+              } else if (node.tagName === 'IMG' && node.alt) {
+                categoryParts.push(node.alt.trim());
+              }
+            } else if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+              categoryParts.push(node.textContent.trim());
+            }
+          }
+        }
+        
+        // Clean up category parts and join with ">"
+        const filteredCategoryParts = categoryParts
+          .map(p => p.trim())
+          .filter(p => p && !p.includes('icon') && p !== '>' && p !== 'icon arrow right');
+        
+        if (filteredCategoryParts.length > 0) {
+          sectionArr.push({ header: 'Category', text: filteredCategoryParts.join(' > ') });
+          console.log("EcoShop: Extracted category:", filteredCategoryParts.join(' > '));
+        }
+        continue;
+      }
+        // For all other fields, handle different element structures
+      // Special case: Brand value might be in an <a> with nested <meta> tags
+      if (header.toLowerCase() === 'brand') {
+        // First try if there's a meta tag with content attribute that represents brand
+        const metaTags = valueEl.querySelectorAll('meta');
+        let brandValue = null;
+        
+        for (const meta of metaTags) {
+          if (meta.getAttribute('content')) {
+            brandValue = meta.getAttribute('content').trim();
+            console.log(`EcoShop: Brand value found in meta tag: ${brandValue}`);
+            break;
+          }
+        }
+        
+        // If we didn't find a good meta tag, fallback to text content
+        if (!brandValue) {
+          brandValue = valueEl.textContent.trim();
+        }
+        
+        if (header && brandValue) {
+          sectionArr.push({ header, text: brandValue });
+          console.log(`EcoShop: Extracted brand spec: ${header}: ${brandValue}`);
+        }
+      } else {
+        // For all other fields, first look for <meta> tags with content
+        const metaTag = valueEl.querySelector('meta[content]');
+        let value = null;
+        
+        if (metaTag && metaTag.getAttribute('content')) {
+          value = metaTag.getAttribute('content').trim();
+          console.log(`EcoShop: Value found in meta tag: ${value}`);
+        } else {
+          // Fallback to text content
+          value = valueEl.textContent.trim();
+        }
+        
+        if (header && value) {
+          sectionArr.push({ header, text: value });
+          console.log(`EcoShop: Extracted spec: ${header}: ${value}`);
+        }
+      }
+    }
+    
+    // STRATEGY 2: Look for specification table (alternative Shopee layout)
+    if (sectionArr.length === 0) {
+      const tables = container.querySelectorAll('table');
+      for (const table of tables) {
+        const rows = table.querySelectorAll('tr');
+        for (const row of rows) {
+          const headerCell = row.querySelector('th') || row.cells[0];
+          const valueCell = row.querySelector('td') || (row.cells.length > 1 ? row.cells[1] : null);
           
-          if (label && value) {
-            const key = label.toLowerCase().replace(':', '').trim();
-            if (key && !['', 'undefined'].includes(key)) {
-              productInfo.specifications[key] = value;
-              console.log("EcoShop: Found key-value spec", key, value);
+          if (headerCell && valueCell) {
+            const header = headerCell.textContent.trim();
+            const value = valueCell.textContent.trim();
+            
+            if (header && value) {
+              sectionArr.push({ header, text: value });
+              console.log(`EcoShop: Extracted spec from table: ${header}: ${value}`);
             }
           }
         }
       }
     }
-  }
-  
-  // Helper to process specification elements
-  function processSpecElements(elements, productInfo) {
-    if (!elements || elements.length === 0) return;
     
-    for (const element of elements) {
-      // Handle table rows
-      const cells = element.querySelectorAll('td, th, div');
-      if (cells && cells.length >= 2) {
-        const key = cells[0].textContent?.trim().toLowerCase();
-        const value = cells[1].textContent?.trim();
-        
-        if (key && value && !['', 'undefined'].includes(key)) {
-          const cleanKey = key.replace(':', '').trim();
-          productInfo.specifications[cleanKey] = value;
-          console.log("EcoShop: Found specification", cleanKey, value);
+    // STRATEGY 3: Shopee sometimes uses definition lists
+    if (sectionArr.length === 0) {
+      const dts = container.querySelectorAll('dt');
+      for (const dt of dts) {
+        const dd = dt.nextElementSibling;
+        if (dd && dd.tagName === 'DD') {
+          const header = dt.textContent.trim();
+          const value = dd.textContent.trim();
           
-          // If this is the brand and we didn't already find it, use it
-          if ((cleanKey === 'brand' || cleanKey === 'make') && !productInfo.brand) {
-            productInfo.brand = value;
+          if (header && value) {
+            sectionArr.push({ header, text: value });
+            console.log(`EcoShop: Extracted spec from dl: ${header}: ${value}`);
           }
         }
       }
-      
-      // Handle div pairs (Shopee often uses this pattern)
-      const text = element.textContent?.trim();
-      if (text && text.includes(':')) {
-        const [key, value] = text.split(':').map(part => part.trim());
-        if (key && value) {
-          productInfo.specifications[key.toLowerCase()] = value;
-          console.log("EcoShop: Found div spec", key, value);
+    }
+    
+    // STRATEGY 4: Look for all direct child divs and extract key-value pairs based on styling 
+    if (sectionArr.length === 0) {
+      // This handles the case where specs are in a grid with alternating cells
+      const allChildren = Array.from(container.children);
+      for (let i = 0; i < allChildren.length; i += 2) {
+        if (i + 1 < allChildren.length) {
+          const header = allChildren[i].textContent.trim();
+          const value = allChildren[i + 1].textContent.trim();
+          
+          if (header && value) {
+            sectionArr.push({ header, text: value });
+            console.log(`EcoShop: Extracted spec from grid: ${header}: ${value}`);
+          }
         }
       }
     }
-  }  // Send product info to the service worker
+    
+    // FALLBACK: Parse lines with colon for robustness
+    const text = container.textContent;
+    const lines = text.split('\n').filter(line => line.trim().length > 0);
+    
+    // If we still haven't extracted much, try line-by-line parsing
+    if (sectionArr.length < 3) {
+      console.log("EcoShop: Using fallback line-by-line specs extraction");
+      
+      for (const line of lines) {
+        if (line.includes(':')) {
+          const colonIndex = line.indexOf(':');
+          const key = line.substring(0, colonIndex).trim();
+          const value = line.substring(colonIndex + 1).trim();
+          
+          if (key && value && key.length < 50 && value.length < 200 && !key.toLowerCase().includes('category')) {
+            sectionArr.push({ header: key, text: value });
+            console.log(`EcoShop: Extracted spec from line: ${key}: ${value}`);
+          }
+        }
+      }
+    }
+    
+    // If extraction is really poor, dump the entire text as a raw spec
+    if (sectionArr.length === 0 && text.trim().length > 0) {
+      console.log("EcoShop: No structured specs found, using raw text");
+      sectionArr.push({ 
+        header: 'Raw Specifications', 
+        text: text.replace(/\s+/g, ' ').trim().substring(0, 500)  // Limit length 
+      });
+    }
+    
+    console.log("EcoShop: Extracted " + sectionArr.length + " specification items");
+  }
+    // Send product info to the service worker
   function sendToServiceWorker(productInfo) {
     // Prevent multiple requests for the same page
     if (hasRequestedData) {
@@ -261,7 +660,22 @@
       return;
     }
     
+    // Don't send if productInfo is null (not a product page)
+    if (!productInfo) {
+      console.log("EcoShop: No product info to send");
+      return;
+    }
+    
+    // Check if we've already extracted the same product (same name + brand)
+    const productKey = `${productInfo.name || ''}_${productInfo.brand || ''}`;
+    if (lastExtractedProduct === productKey) {
+      console.log("EcoShop: Same product already extracted, skipping");
+      return;
+    }
+    
+    lastExtractedProduct = productKey;
     hasRequestedData = true;
+    console.log("EcoShop: Extraction successful, setting flags but keeping observer active");
     console.log("EcoShop: Sending to service worker", productInfo);
     chrome.runtime.sendMessage({ 
       action: "checkSustainability", 
@@ -274,7 +688,8 @@
       }
       
       if (response && response.success) {
-        displaySustainabilityBadge(response.data);      } else if (response && response.error) {
+        displaySustainabilityBadge(response.data);
+      } else if (response && response.error) {
         console.error("Error getting sustainability data:", response.error);
         if (response.error.includes("Database connection") && !hasShownErrorToast) {
           hasShownErrorToast = true;
@@ -323,7 +738,8 @@
     
     // Create floating badge
     badge = document.createElement('div');
-    badge.id = 'ecoshop-sustainability-badge';    // Apply position based on user preference
+    badge.id = 'ecoshop-sustainability-badge';    
+    // Apply position based on user preference
     let positionStyles = '';
     switch (preferences.badgePosition) {
       case 'bottom-right':
@@ -468,37 +884,74 @@
     }
     return true;
   });
-  
-  // Wait for the page to fully load
+    // Wait for the page to fully load
   window.addEventListener('load', () => {
     // First attempt to extract product info
     setTimeout(() => {
       const productInfo = extractProductInfo();
-      if (productInfo.brand || productInfo.name) {
+      if (productInfo && (productInfo.brand || productInfo.name)) {
         sendToServiceWorker(productInfo);
       } else {
-        console.log("EcoShop: Initial extraction failed, trying again in 2 seconds");
+        console.log("EcoShop: Initial extraction failed or not a product page, trying again in 2 seconds");
         // Try again after a longer delay for dynamic content
         setTimeout(() => {
           const productInfo = extractProductInfo();
-          if (productInfo.brand || productInfo.name) {
+          if (productInfo && (productInfo.brand || productInfo.name)) {
             sendToServiceWorker(productInfo);
           } else {
-            console.log("EcoShop: Could not extract product information");
+            console.log("EcoShop: Could not extract product information or not a product page");
           }
         }, 2000);
       }
     }, 1000);
   });
-    // Also try extraction when DOM content changes (but only once)
-  // This helps with single-page apps or sites that load content dynamically
-  window.ecoshopObserver = new MutationObserver((mutations) => {
-    // Only check if we haven't already displayed a badge AND haven't already requested data
-    if (!document.getElementById('ecoshop-sustainability-badge') && !hasRequestedData) {
-      const productInfo = extractProductInfo();
-      if (productInfo.brand || productInfo.name) {
-        sendToServiceWorker(productInfo);
+  // Create a debounced extraction function to avoid too many calls
+  let extractionTimeout = null;
+  const debouncedExtraction = () => {
+    clearTimeout(extractionTimeout);
+    extractionTimeout = setTimeout(() => {
+      if (!document.getElementById('ecoshop-sustainability-badge') && !hasRequestedData) {
+        if (isProductPage()) {
+          console.log("EcoShop: Observer detected likely product content, attempting extraction");
+          const productInfo = extractProductInfo();
+          if (productInfo && (productInfo.brand || productInfo.name)) {
+            sendToServiceWorker(productInfo);
+          }
+        }
       }
+    }, 1000); // Wait 1 second after DOM changes before extracting
+  };
+
+  // Set up an observer to watch for important page changes
+  window.ecoshopObserver = new MutationObserver((mutations) => {
+    // Look for significant DOM changes that might indicate product content has loaded
+    const significantChange = mutations.some(mutation => {
+      // Check for added product-related elements
+      if (mutation.addedNodes && mutation.addedNodes.length) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            // Check if the added node contains product indicators
+            if (node.querySelector) {
+              const hasProductNodes = node.querySelector('.product-specs, .specifications, .description, .qPNIqx, .YPqix5');
+              if (hasProductNodes) return true;
+              
+              // Check text content for common indicators
+              if (node.textContent && 
+                  (node.textContent.includes('Product Specifications') || 
+                   node.textContent.includes('Brand') ||
+                   node.textContent.includes('Category'))) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+      return false;
+    });
+    
+    // If we detected significant changes, try extraction
+    if (significantChange) {
+      debouncedExtraction();
     }
   });
 
@@ -507,8 +960,10 @@
     window.ecoshopObserver.observe(document.body, {
       childList: true,
       subtree: true,
-      attributes: false,
+      attributes: true, // Watch for attribute changes too
+      attributeFilter: ['class', 'id', 'style'], // Only these attributes matter for content loading
       characterData: false
     });
-  }, 3000);
+    console.log("EcoShop: Observer started");
+  }, 2000);
 })();

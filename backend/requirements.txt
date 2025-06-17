@@ -6,3 +6,7 @@ python-dotenv==1.0.0
 pymongo[srv]==4.5.0
 Werkzeug==2.2.3
 groq==0.4.1
+bson==0.5.10
+certifi==2023.7.22
+urllib3==1.26.16
+typing-extensions==4.7.1

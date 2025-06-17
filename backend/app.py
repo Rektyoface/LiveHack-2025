@@ -11,12 +11,12 @@ from flask_cors import CORS
 import json
 import os
 import logging
+import re  # Added re import
 from typing import Dict, Any, List, Optional
 import datetime
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 from dotenv import load_dotenv
-
 # Import the cleaned export function
 from scripts.export_to_mongo import export_product_to_mongo
 
@@ -30,7 +30,7 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('ecoshop_api')
 
@@ -57,12 +57,12 @@ def get_mongo_client():
             if config.MONGO_URI:
                 logger.info(f"Connecting to MongoDB at {config.MONGO_URI.split('@')[-1]}")
                 mongo_client = MongoClient(config.MONGO_URI, 
-                                         serverSelectionTimeoutMS=5000,  # Shorter timeout for testing
-                                         connectTimeoutMS=5000,
-                                         socketTimeoutMS=5000,
-                                         tls=True,
-                                         tlsAllowInvalidCertificates=False,  # Use valid certificates
-                                         retryWrites=True)
+                                        serverSelectionTimeoutMS=5000,  # Shorter timeout for testing
+                                        connectTimeoutMS=5000,
+                                        socketTimeoutMS=5000,
+                                        tls=True,
+                                        tlsAllowInvalidCertificates=False,  # Use valid certificates
+                                        retryWrites=True)
                 # Validate connection is working
                 mongo_client.admin.command('ping')
                 logger.info("MongoDB connection successful")
@@ -139,7 +139,7 @@ def get_brand_score():
     logger.info(f"Searching for brand: {brand_query}")
     
     data = load_sustainability_data()
-      # Case-insensitive search for exact or partial match
+    # Case-insensitive search for exact or partial match
     brand_query_lower = brand_query.lower()
     
     # Create a list of known brand aliases/variations
@@ -182,7 +182,7 @@ def get_brand_score():
                 'success': True,
                 'data': item
             })
-              # If no match found, return error since this is a production consumer extension
+            # If no match found, return error since this is a production consumer extension
     logger.info(f"No match found for brand '{brand_query}' in database")
     return jsonify({
         'success': False,
@@ -190,38 +190,81 @@ def get_brand_score():
         'message': 'Brand not found in database'
     }), 404
 
+def clean_specifications(specs):
+    """Remove review and rating text from product specifications."""
+    if isinstance(specs, dict):
+        cleaned = {}
+        for k, v in specs.items():
+            # Remove keys that are obviously reviews/ratings
+            if any(word in k.lower() for word in ["review", "rating", "comment", "report abuse", "5.0 out of 5", "star", "media", "helpful?"]):
+                continue
+            # Remove values that contain review/rating patterns
+            if isinstance(v, str):
+                lower_v = v.lower()
+                if any(word in lower_v for word in ["review", "ratings", "comments", "report abuse", "5.0 out of 5", "star", "media", "helpful?"]):
+                    # Truncate at the first review keyword
+                    for word in ["review", "ratings", "comments", "report abuse", "5.0 out of 5", "star", "media", "helpful?"]:
+                        idx = lower_v.find(word)
+                        if idx != -1:
+                            v = v[:idx]
+                            break
+                cleaned[k] = v.strip()
+            else:
+                cleaned[k] = v
+        return cleaned
+    elif isinstance(specs, str):
+        # Remove review/rating text from a string
+        lower_s = specs.lower()
+        for word in ["review", "ratings", "comments", "report abuse", "5.0 out of 5", "star", "media", "helpful?"]:
+            idx = lower_s.find(word)
+            if idx != -1:
+                return specs[:idx].strip()
+        return specs
+    return specs
+
 @app.route('/api/product', methods=['POST'])
 def process_product():
     """Process and store detailed product information using the cleaned export logic."""
-    try:        # Get JSON data from request
+    try:
+        # Get JSON data from request
         product_data = request.json
         if not product_data:
             return jsonify({
                 'success': False,
                 'error': 'No product data provided'
-            }), 400
+            }), 400        # Clean specifications to remove reviews/ratings
+        if 'specifications' in product_data:
+            product_data['specifications'] = clean_specifications(product_data['specifications'])
         
         logger.info(f"=== PRODUCT DATA RECEIVED ===")
         logger.info(f"Product Name: {product_data.get('name', 'Unknown product')}")
         logger.info(f"Brand: {product_data.get('brand', 'Unknown brand')}")
         logger.info(f"URL: {product_data.get('url', 'No URL')}")
         logger.info(f"Specifications: {product_data.get('specifications', {})}")
+        logger.info(f"Details: {product_data.get('details', {})}")
+        logger.info(f"Description: {product_data.get('description', {})}")
         logger.info(f"Full raw data: {json.dumps(product_data, indent=2)}")
         logger.info(f"===============================")
-          # For testing without MongoDB, return mock data
+        
+        # For testing without MongoDB, return the scraped data for analysis
         client = get_mongo_client()
         if not client:
-            logger.info("MongoDB not available - returning test data")
-            # Return mock sustainability data for testing
+            logger.info("MongoDB not available - returning scraped data for testing")
+            
+            # Create a comprehensive response showing all scraped data
             sustainability_result = {
                 'brand': product_data.get('brand', 'Unknown'),
-                'score': 75,  # Mock score
-                'co2e': 2.5,
-                'waterUsage': 'low',
-                'wasteGenerated': 'low',
-                'laborPractices': 'good',
-                'certainty': 'high',
-                'message': f"Test data for {product_data.get('brand', 'this brand')} - MongoDB not connected"
+                'score': 'scraped',  # Indicate this is scraped data
+                'co2e': 'analyzing',
+                'waterUsage': 'analyzing', 
+                'wasteGenerated': 'analyzing',
+                'laborPractices': 'analyzing',
+                'certainty': 'scraped_data',
+                'message': f"Scraped data for {product_data.get('brand', 'this product')} - MongoDB not connected",
+                'scraped_specifications': product_data.get('specifications', {}),
+                'scraped_details': product_data.get('details', {}),
+                'scraped_description': product_data.get('description', {}),
+                'scraping_test': True
             }
             logger.info(f"=== RESPONSE BEING SENT ===")
             logger.info(f"Response data: {json.dumps(sustainability_result, indent=2)}")  
@@ -495,7 +538,7 @@ def configure_mongodb():
         # Test the connection
         test_client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
         test_client.admin.command('ping')
-          # If successful, update our config
+        # If successful, update our config
         with open('.env', 'w') as env_file:
             env_file.write(f"MONGO_URI={mongo_uri}\n")
             env_file.write(f"MONGO_DB={data.get('db', config.MONGO_DB)}\n")
@@ -527,7 +570,7 @@ def contribute_data():
                 'success': False,
                 'error': 'No data provided'
             }), 400
-          # In a real app, this would validate and store the data
+        # In a real app, this would validate and store the data
         logger.info(f"Received contribution: {data}")
         # Store contribution in MongoDB if available
         client = get_mongo_client()
@@ -762,6 +805,271 @@ def update_task_status_endpoint(task_id):
             'error': str(e)
         }), 500
 
+# --- MINIMAL LOGGING FOR EXTENSION REQUESTS ---
+@app.before_request
+def log_extension_payload():
+    if request.path.startswith('/extract_and_rate') or request.path.startswith('/rate_product') or request.path.startswith('/api/score'):
+        if request.is_json:
+            payload = json.dumps(request.get_json(silent=True) or {}, separators=(',', ':'))
+        else:
+            payload = request.get_data(as_text=True).strip()
+        logger.info(f'EXT PAYLOAD {request.path}: {payload[:500]}')
+
+@app.route('/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
+@app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
+def catch_all(path):
+    return jsonify({"status": "ok"}), 200
+
+@app.route('/extract_and_rate', methods=['POST'])
+def extract_and_rate_product():
+    """Extract product info, rate it, and store it."""
+    try:
+        # Log raw request body for debugging
+        raw_data = request.get_data(as_text=True)
+        logger.info(f'EXT PAYLOAD {request.path}: {raw_data[:500]}')
+
+        data = {}
+        if request.content_type == 'application/json':
+            data = request.get_json()
+            if not data:
+                logger.warning("Empty JSON payload received.")
+                return jsonify({'success': False, 'error': 'Empty JSON payload'}), 400
+        elif 'text/plain' in request.content_type: # More robust check for text/plain
+            logger.info(f"Received text/plain data. Attempting to parse.")
+            if raw_data:
+                try:
+                    # Attempt to parse the "key=value, key=value" format
+                    # This specifically looks for URL, Brand, Name, Product Specs
+                    parsed_data = {}
+                    # Split by common delimiters, handling cases where some might be missing
+                    # A more robust parser might be needed for complex cases
+                    
+                    # Try to extract known fields first
+                    url_match = re.search(r"URL: (.*?)(, Brand:|, Name:|, Product Specs:|$)", raw_data)
+                    brand_match = re.search(r"Brand: (.*?)(, URL:|, Name:|, Product Specs:|$)", raw_data)
+                    name_match = re.search(r"Name: (.*?)(, URL:|, Brand:|, Product Specs:|$)", raw_data)
+                    specs_match = re.search(r"Product Specs: (.*)", raw_data)
+
+                    if url_match and url_match.group(1):
+                        parsed_data['url'] = url_match.group(1).strip()
+                    if brand_match and brand_match.group(1):
+                        parsed_data['brand'] = brand_match.group(1).strip()
+                    if name_match and name_match.group(1):
+                        parsed_data['name'] = name_match.group(1).strip()
+                    
+                    # For specifications, assume it's the rest of the string after "Product Specs: "
+                    # And then try to parse it as "Key1Value1: Key2Value2" (if that's the intended format)
+                    if specs_match and specs_match.group(1):
+                        specs_string = specs_match.group(1).strip()
+                        # If specs_string is "CategoryShopeeVideo GamesPlaystationGames: Stock184"
+                        # This needs a specific parser or to be sent to LLM as is.
+                        # For now, let's put it into an array of objects as content.js might send for JSON
+                        parsed_data['specifications'] = [{'header': 'Raw Specifications', 'text': specs_string}]
+                    else:
+                        parsed_data['specifications'] = []
+                        
+                    parsed_data['description'] = [] # Assuming no separate description in this text format
+
+                    data = parsed_data
+                    if not data.get('url') and not data.get('name'): # Check if parsing yielded anything useful
+                        logger.warning(f"Could not effectively parse text/plain data into key-value pairs: {raw_data}")
+                        data = {"raw_text_content": raw_data} # Fallback to sending raw text
+                    else:
+                        logger.info(f"Successfully parsed text/plain data: {data}")
+                        
+                except Exception as e:
+                    logger.error(f"Error parsing text/plain data: {e}. Falling back to raw_text_content.")
+                    data = {"raw_text_content": raw_data}
+            else:
+                logger.warning("Empty text/plain payload received.")
+                data = {"raw_text_content": ""} # Treat as empty raw text
+        else:
+            logger.warning(f"Unsupported content type: {request.content_type}")
+            return jsonify({'success': False, 'error': f'Unsupported content type: {request.content_type}'}), 415
+
+        product_url = data.get('url')
+        product_brand = data.get('brand')
+        product_name = data.get('name')
+        # Ensure specs and desc are lists, even if not present in 'data'
+        product_specs = data.get('specifications', []) 
+        product_desc = data.get('description', [])   
+        raw_text_content = data.get('raw_text_content')
+
+        if not product_url and not raw_text_content and not product_name: # Added product_name check
+            logger.warning("Missing product URL, name, or raw text content in request.")
+            return jsonify({'success': False, 'error': 'Missing product URL, name, or raw text content'}), 400
+
+        combined_details = ""
+        # Process structured data if available
+        if product_url or product_brand or product_name:
+            logger.info(f"Processing data for URL: {product_url}, Brand: {product_brand}, Name: {product_name}")
+            
+            if isinstance(product_specs, list):
+                for spec in product_specs:
+                    if isinstance(spec, dict) and 'header' in spec and 'text' in spec:
+                        combined_details += f"{spec['header']}: {spec['text']}\\n"
+                    elif isinstance(spec, str): # Handle if specs are just strings
+                        combined_details += f"{spec}\\n"
+            elif isinstance(product_specs, str): # Handle if specs is a single string
+                combined_details += f"Specifications: {product_specs}\\n"
+
+
+            if isinstance(product_desc, list):
+                for desc_item in product_desc:
+                    if isinstance(desc_item, dict) and 'header' in desc_item and 'text' in desc_item:
+                        combined_details += f"{desc_item['header']}: {desc_item['text']}\\n"
+                    elif isinstance(desc_item, str):
+                        combined_details += f"{desc_item}\\n"
+            elif isinstance(product_desc, str):
+                combined_details += f"Description: {product_desc}\\n"
+            
+            # If raw_text_content was the primary source and got parsed into fields,
+            # we might not need to append it again unless it contains more.
+            # However, if raw_text_content exists AND combined_details is still empty, use raw_text.
+            if not combined_details and raw_text_content:
+                logger.info("Using raw_text_content for details as structured parsing was minimal.")
+                combined_details = raw_text_content
+            elif raw_text_content and raw_text_content not in combined_details:
+                # This case is if raw_text was a fallback and we also have some parsed details
+                # We might want to append it if it's different or provides more context
+                # For now, let's assume parsed details are preferred if they exist.
+                pass
+
+
+            # Placeholder for LLM call
+            # score, reasoning = llm.rate_sustainability_from_text(product_name, product_brand, combined_details)
+            score = 50 # Dummy score
+            reasoning = "Dummy reasoning based on combined details."
+            if not combined_details.strip(): # Check if combined_details is empty or just whitespace
+                reasoning = "No detailed specifications or description provided for LLM analysis."
+                logger.info("No combined details for LLM from structured data.")
+            else:
+                logger.info(f"Combined details for LLM:\\n{combined_details}")
+
+
+        elif raw_text_content: # This case should ideally be covered by the text/plain parsing now
+            logger.info(f"Processing raw text content directly (fallback).")
+            combined_details = raw_text_content # Use raw_text_content for LLM
+            # score, reasoning = llm.rate_sustainability_from_raw_text(raw_text_content)
+            score = 40 # Dummy score for raw text
+            reasoning = "Dummy reasoning based on raw text content."
+            logger.info(f"Raw text for LLM:\\n{raw_text_content}")
+        else:
+            logger.warning("Insufficient data for processing after attempting all parsing.")
+            return jsonify({'success': False, 'error': 'Insufficient data for processing'}), 400
+
+        # ... (rest of the function: database interaction, task creation, etc.)
+        # For now, just return the dummy score and reasoning
+        result = {
+            'brand': product_brand,
+            'name': product_name,
+            'url': product_url,
+            'score': score,
+            'reasoning': reasoning,
+            'raw_data_received': raw_data, # Include the originally received raw data for reference
+            'processed_details_for_llm': combined_details, # Details sent to LLM
+            'last_updated': datetime.datetime.utcnow().isoformat() + 'Z'
+        }
+
+        # Optionally, store this result in MongoDB
+        client = get_mongo_client()
+        if client:
+            try:
+                db = client[config.MONGO_DB_NAME]
+                collection = db[config.MONGO_COLLECTION_NAME]
+                # Use a unique identifier for the product, e.g., URL or a hash
+                # For simplicity, using URL as the main identifier here
+                if product_url: # Only upsert if we have a URL
+                    update_result = collection.update_one(
+                        {'url': product_url},
+                        {'$set': result},
+                        upsert=True
+                    )
+                    logger.info(f"Data for {product_url} {'updated' if update_result.matched_count else 'inserted'} in MongoDB.")
+                else:
+                    logger.info("No product URL, skipping MongoDB upsert for this request.")
+            except Exception as e:
+                logger.error(f"MongoDB operation failed: {e}")
+        
+        return jsonify({'success': True, 'data': result})
+
+    except Exception as e:
+        logger.error(f"Error in /extract_and_rate: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': 'An internal server error occurred'}), 500
+
+@app.route('/rate_product', methods=['POST'])
+def rate_product():
+    """Rate a product's sustainability based on various factors."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        # Extract factors from request
+        factors = {
+            'co2e': data.get('co2e', 5.0),  # CO2 equivalent emissions (lower is better)
+            'water_usage': data.get('water_usage', 5.0),  # Water usage scale 1-10 (lower is better)
+            'waste': data.get('waste', 5.0),  # Waste generation scale 1-10 (lower is better)
+            'labor': data.get('labor', 5.0),  # Labor practices scale 1-10 (higher is better)
+            'transparency': data.get('transparency', 5.0),  # Transparency scale 1-10 (higher is better)
+            'recycled_materials': data.get('recycled_materials', 0.0),  # Percentage of recycled materials
+            'renewable_energy': data.get('renewable_energy', 0.0)  # Percentage of renewable energy
+        }
+        
+        # Calculate weighted score (customize these weights based on importance)
+        weights = {
+            'co2e': 0.25,
+            'water_usage': 0.15,
+            'waste': 0.15,
+            'labor': 0.2,
+            'transparency': 0.1,
+            'recycled_materials': 0.1,
+            'renewable_energy': 0.05
+        }
+        
+        # Transform scores so higher is always better
+        transformed_scores = {
+            'co2e': max(0, 10 - factors['co2e']),  # Invert scale so lower emissions = higher score
+            'water_usage': max(0, 10 - factors['water_usage']),  # Invert scale
+            'waste': max(0, 10 - factors['waste']),  # Invert scale
+            'labor': factors['labor'],  # Already correct scale
+            'transparency': factors['transparency'],  # Already correct scale
+            'recycled_materials': factors['recycled_materials'] / 10,  # Convert percentage to scale
+            'renewable_energy': factors['renewable_energy'] / 10  # Convert percentage to scale
+        }
+        
+        # Calculate weighted score
+        weighted_score = sum(transformed_scores[factor] * weights[factor] for factor in weights)
+        
+        # Scale to 0-100
+        final_score = int(weighted_score * 10)
+        
+        # Determine rating labels
+        rating = "Poor"
+        if final_score >= 80:
+            rating = "Excellent"
+        elif final_score >= 70:
+            rating = "Very Good"
+        elif final_score >= 60:
+            rating = "Good"
+        elif final_score >= 50:
+            rating = "Fair"
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'score': final_score,
+                'rating': rating,
+                'factors': factors,
+                'weights': weights,
+                'advice': generate_sustainability_advice(factors)
+            }
+        })
+    
+    except Exception as e:
+        logger.error(f"Error in /rate_product: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': 'An internal server error occurred'}), 500
+
 if __name__ == '__main__':
     # Load data once at startup
     load_sustainability_data()
@@ -770,7 +1078,6 @@ if __name__ == '__main__':
         logger.info("MongoDB connection established")
     else:
         logger.warning("MongoDB connection not available - running in test mode")
-    
     # Run the app
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)

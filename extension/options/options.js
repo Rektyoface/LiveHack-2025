@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', function() {
     showAlternatives: true,
     badgePosition: 'bottom-right',
     darkMode: true,
-    apiEndpoint: 'http://localhost:5000/api/score',
+    apiEndpoint: 'https://api.lxkhome.duckdns.org/api/score',
     dataContribution: false
   };
   

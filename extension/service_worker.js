@@ -1,6 +1,9 @@
 // Service worker for EcoShop sustainability extension - Production Version with SSE
 // This extension requires database connectivity and uses Server-Sent Events for real-time updates
 
+console.log("EcoShop Service Worker starting up...");
+console.log("EcoShop Service Worker ACTIVE: [main service_worker.js] - v2025-06-17");
+
 // In-memory cache for faster lookups
 let sustainabilityCache = {};
 
@@ -14,58 +17,131 @@ let tabDataCache = {};
 let activeConnections = new Map();
 
 // API Base URL
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'https://api.lxkhome.duckdns.org';
 
-// Main message listener
+console.log("EcoShop Service Worker initialized, API:", API_BASE_URL);
+
+// List of API endpoints to try for sustainability data
+const API_ENDPOINTS = [
+  // Primary API (replace with your actual API if different)
+  // `${API_BASE_URL}/sustainability/analyze`, // Example: if your backend has a specific path
+  // `${API_BASE_URL}/score`, // Example
+  // `${API_BASE_URL}/product/analyze`, // Example
+
+  // Using the specific endpoints from your app.py for now, assuming they are hosted under API_BASE_URL
+  `${API_BASE_URL}/extract_and_rate`, // This seems to be the main endpoint from your app.py
+  `${API_BASE_URL}/rate_product` // This is another endpoint in your app.py
+  
+  // Fallback APIs (consider removing if you only want to use your backend)
+  // 'https://api.sustainabilitydata.com/analyze',
+  // 'https://sustainability-api.herokuapp.com/score',
+  // 'https://api.ecodata.org/product/analyze'
+];
+
+console.log("Using API endpoints:", API_ENDPOINTS.join(', '));
+
+// Main message listener - Edge-compatible single listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "checkSustainability") {
-    handleSustainabilityCheck(message.productInfo, sendResponse, sender);
-    return true; // Required for async response
-  } else if (message.action === "openPopup") {
-    // Make the badge more noticeable
-    if (sender.tab && sender.tab.id) {
-      chrome.action.setPopup({ tabId: sender.tab.id, popup: "popup/popup.html" });
-      chrome.action.setBadgeText({ text: "OPEN", tabId: sender.tab.id });
-      chrome.action.setBadgeBackgroundColor({ color: [41, 121, 255, 255], tabId: sender.tab.id });
+  console.log("Service worker received message:", message.action, message);
+  
+  try {
+    if (message.action === "checkSustainability") {
+      console.log("Starting sustainability check...");
       
-      // Flash the badge to draw attention
-      let flashCount = 0;
-      const flashInterval = setInterval(() => {
-        if (flashCount >= 3) {
-          clearInterval(flashInterval);
-          const cachedData = getCachedDataForTab(sender.tab.id);
-          if (cachedData && cachedData.score) {
-            updateBadgeForTab(sender.tab.id, cachedData.score);
-          }
-          return;
+      // Call the handler and ensure response
+      (async () => {
+        try {
+          await handleSustainabilityCheck(message.productInfo, sendResponse, sender);
+        } catch (error) {
+          console.error("Handler failed:", error);
+          sendResponse({
+            success: false,
+            error: "Handler error: " + error.message
+          });
         }
-        chrome.action.setBadgeBackgroundColor({ 
-          color: flashCount % 2 === 0 ? [255, 82, 82, 255] : [41, 121, 255, 255], 
-          tabId: sender.tab.id 
-        });
-        flashCount++;
-      }, 500);
+      })();
+      
+      return true; // Required for async response
+    } else if (message.action === "openPopup") {
+      if (sender.tab && sender.tab.id) {
+        chrome.action.setPopup({ tabId: sender.tab.id, popup: "popup/popup.html" });
+        chrome.action.setBadgeText({ text: "OPEN", tabId: sender.tab.id });
+        chrome.action.setBadgeBackgroundColor({ color: [41, 121, 255, 255], tabId: sender.tab.id });
+        let flashCount = 0;
+        const flashInterval = setInterval(() => {
+          if (flashCount >= 3) {
+            clearInterval(flashInterval);
+            const cachedData = getCachedDataForTab(sender.tab.id);
+            if (cachedData && cachedData.score) {
+              updateBadgeForTab(sender.tab.id, cachedData.score);
+            }
+            return;
+          }
+          chrome.action.setBadgeBackgroundColor({ 
+            color: flashCount % 2 === 0 ? [255, 82, 82, 255] : [41, 121, 255, 255], 
+            tabId: sender.tab.id 
+          });
+          flashCount++;
+        }, 500);
+      }
+      sendResponse({ success: true });
+      return false;
+    } else if (message.action === "checkCurrentPage") {
+      const productInfo = {
+        brand: extractBrandFromTitle(message.title),
+        name: message.title,
+        url: message.url
+      };
+      
+      (async () => {
+        try {
+          await handleSustainabilityCheck(productInfo, sendResponse, sender);
+        } catch (error) {
+          console.error("Handler failed:", error);
+          sendResponse({
+            success: false,
+            error: "Handler error: " + error.message
+          });
+        }
+      })();
+      
+      return true;
+    } else if (message.action === "getMostRecentProductInfo") {
+      try {
+        if (scrapedProductsHistory.length > 0) {
+          sendResponse({
+            success: true,
+            product: scrapedProductsHistory[0]
+          });
+        } else {
+          sendResponse({ success: false, error: "No product info available." });
+        }
+      } catch (e) {
+        console.log("Response error:", e);
+        sendResponse({ success: false, error: "Error retrieving product info" });
+      }
+      return true;
+    } else if (message.action === "showToast" && message.message) {
+      if (typeof showToast === 'function') {
+        showToast(message.message, 4000);
+      }
+      sendResponse({ success: true });
+      return true;
+    }
+  } catch (err) {
+    console.error("Service worker error:", err);
+    try { 
+      sendResponse({ success: false, error: 'Internal error in service worker: ' + err.message }); 
+    } catch (e) {
+      console.log("Failed to send error response:", e);
     }
     return false;
-  } else if (message.action === "checkCurrentPage") {
-    const productInfo = {
-      brand: extractBrandFromTitle(message.title),
-      name: message.title,
-      url: message.url
-    };
-    handleSustainabilityCheck(productInfo, sendResponse, sender);
-    return true;
-  } else if (message.action === "getMostRecentProductInfo") {
-    if (scrapedProductsHistory.length > 0) {
-      sendResponse({
-        success: true,
-        product: scrapedProductsHistory[0]
-      });
-    } else {
-      sendResponse({ success: false, error: "No product info available." });
-    }
-    return true;
   }
+  
+  // Default fallback
+  console.log("Unknown message action:", message.action);
+  sendResponse({ success: false, error: "Unknown action" });
+  return false;
 });
 
 function getCachedDataForTab(tabId) {
@@ -226,101 +302,74 @@ function monitorTaskWithSSE(taskId, productInfo, sender, sendResponse) {
 
 // Handle sustainability data lookup - Production version requires database connection
 async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
+  console.log("=== Starting handleSustainabilityCheck (API-first) ===");
+  console.log("Product info (raw):", productInfo);
   try {
-    console.log("Product info received:", productInfo);
+    // Use plainText if available, else fallback to formatting
+    const plainText = productInfo.plainText || (typeof formatAsPlainText === 'function' ? formatAsPlainText(productInfo) : '');
+    console.log("Using plainText:", plainText);
+    const transformed = { text: plainText };
     
-    // Add to history for reference
-    if (productInfo && (productInfo.brand || productInfo.name)) {
+    // Add to history
+    if (transformed.text) {
       const productWithTimestamp = {
-        ...productInfo,
+        ...transformed,
         timestamp: new Date().toISOString()
       };
-      
       scrapedProductsHistory.unshift(productWithTimestamp);
-      if (scrapedProductsHistory.length > 100) {
-        scrapedProductsHistory.pop();
-      }
-      
-      console.log("Added product to history:", productInfo.brand || productInfo.name);
+      if (scrapedProductsHistory.length > 100) scrapedProductsHistory.pop();
     }
-
-    // Check cache first
-    const cacheKey = productInfo.brand?.toLowerCase();
+    
+    // Check cache
+    const cacheKey = (productInfo.brand || productInfo.name)?.toLowerCase();
     if (cacheKey && sustainabilityCache[cacheKey]) {
-      console.log("Cache hit for brand:", cacheKey);
       const data = sustainabilityCache[cacheKey];
-      
-      if (sender && sender.tab && sender.tab.id) {
+      if (sender?.tab?.id) {
         updateBadgeForTab(sender.tab.id, data.score);
         tabDataCache[sender.tab.id] = data;
       }
-      
-      sendResponse({
-        success: true,
-        data: data
-      });
-      return;
-    }    // Production extension - simplified for testing
-    let sustainabilityData = null;
-    
-    try {
-      if (sender && sender.tab && sender.tab.id) {
-        sendToastToTab(sender.tab.id, `EcoShop: Checking database for ${productInfo.brand || productInfo.name}...`);
-      }
-      
-      // Get data from API (will return test data if MongoDB is not available)
-      sustainabilityData = await fetchFromApi(productInfo);
-      
-      // If we got data, return it
-      if (sustainabilityData) {
-        // Cache the result
-        if (cacheKey) {
-          sustainabilityCache[cacheKey] = sustainabilityData;
-        }
-        
-        if (sender && sender.tab && sender.tab.id) {
-          updateBadgeForTab(sender.tab.id, sustainabilityData.score);
-          tabDataCache[sender.tab.id] = sustainabilityData;
-        }
-        
-        sendResponse({
-          success: true,
-          data: sustainabilityData
-        });
-        return;
-      } else {
-        // No data received
-        throw new Error("No data received from API");
-      }
-        } catch (error) {
-      console.log("Database connection failed:", error);
-      if (sender && sender.tab && sender.tab.id) {
-        sendToastToTab(sender.tab.id, `EcoShop: Database connection failed. Please check your internet connection.`);
-      }
-      
-      sendResponse({
-        success: false,
-        error: "Database connection required for sustainability data",
-        message: "This extension requires an active database connection. Please ensure you have internet connectivity and the database is available."
-      });
+      sendResponse({ success: true, data });
       return;
     }
     
+    // 1. Try backend API
+    try {
+      const apiData = await fetchFromApi(transformed, productInfo.brand);
+      if (apiData) {
+        if (cacheKey) sustainabilityCache[cacheKey] = apiData;
+        if (sender?.tab?.id) {
+          updateBadgeForTab(sender.tab.id, apiData.score);
+          tabDataCache[sender.tab.id] = apiData;
+          sendToastToTab(sender.tab.id, `EcoShop: Analysis complete! Score: ${apiData.score}`);
+        }
+        sendResponse({ success: true, data: apiData });
+        return;
+      }
+    } catch (apiError) {
+      console.warn("API call failed, falling back to test score:", apiError);
+    }
+    
+    // 2. Fallback: local test score
+    const testData = generateTestScore(transformed);
+    if (cacheKey) sustainabilityCache[cacheKey] = testData;
+    if (sender?.tab?.id) {
+      updateBadgeForTab(sender.tab.id, testData.score);
+      tabDataCache[sender.tab.id] = testData;
+      sendToastToTab(sender.tab.id, `EcoShop: Test analysis complete! Score: ${testData.score}`);
+    }
+    sendResponse({ success: true, data: testData, status: 'fallback' });
   } catch (error) {
     console.error("Error in handleSustainabilityCheck:", error);
-    sendResponse({
-      success: false,
-      error: "Internal error occurred"
-    });
+    sendResponse({ success: false, error: error.message });
   }
+  console.log("=== Completed handleSustainabilityCheck ===");
 }
 
-// Fetch sustainability data from API - Production version only
-async function fetchFromApi(productInfo) {
+// Update fetchFromApi to use new structure
+async function fetchFromApi(transformedTextPayload, brandForFallback) {
   try {
-    if (!productInfo || !productInfo.brand) {
-      console.error("Missing product info or brand name for API request");
-      throw new Error("Missing brand name");
+    if (!transformedTextPayload || !transformedTextPayload.text) {
+      throw new Error("Missing product information");
     }
 
     const settingsData = await new Promise(resolve => {
@@ -336,36 +385,38 @@ async function fetchFromApi(productInfo) {
     
     let apiBaseUrl = settingsData.directApiEndpoint || 
                 (settingsData.settings && settingsData.settings.apiEndpoint) || 
-                "http://localhost:5000";
+                "https://api.lxkhome.duckdns.org";
     
     if (apiBaseUrl.endsWith('/api/score')) {
       apiBaseUrl = apiBaseUrl.replace('/api/score', '');
     }
+    // Ensure apiBaseUrl does not end with a slash before appending path
+    const cleanApiBaseUrl = apiBaseUrl.replace(/\/$/, '');
     
-    const apiUrl = `${apiBaseUrl}/api/product`;
+    const postApiUrl = cleanApiBaseUrl + '/extract_and_rate';
     
-    console.log("Using API endpoint:", apiUrl);
-    console.log("Sending product info:", productInfo);
+    console.log("Using API endpoint for POST:", postApiUrl);
+    console.log("Sending product text:", transformedTextPayload.text);
+    console.log("Text length:", transformedTextPayload.text?.length);
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     
     try {
-      const response = await fetch(apiUrl, {
+      console.log("Making API request to:", postApiUrl);
+      const response = await fetch(postApiUrl, {
         method: 'POST',
         mode: 'cors',
         cache: 'no-cache',
         signal: controller.signal,
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'text/plain'
         },
-        body: JSON.stringify({
-          brand: productInfo.brand,
-          name: productInfo.name,
-          url: productInfo.url,
-          specifications: productInfo.specifications || {}
-        })
+        body: transformedTextPayload.text
       });
+      
+      console.log("API response status:", response.status);
+      console.log("API response ok:", response.ok);
       
       clearTimeout(timeoutId);
       
@@ -374,7 +425,8 @@ async function fetchFromApi(productInfo) {
         
         // Try simpler brand lookup endpoint
         console.log("Falling back to simple brand lookup");
-        const fallbackUrl = `${apiBaseUrl}/api/score?brand=${encodeURIComponent(productInfo.brand)}`;
+        const fallbackUrl = cleanApiBaseUrl + `/rate_product?brand=${encodeURIComponent(brandForFallback)}`;
+        console.log("Trying fallback GET request to:", fallbackUrl);
         const fallbackResponse = await fetch(fallbackUrl, {
           method: 'GET',
           mode: 'cors',
@@ -382,7 +434,7 @@ async function fetchFromApi(productInfo) {
         });
         
         if (!fallbackResponse.ok) {
-          throw new Error(`API returned ${response.status}: ${response.statusText}`);
+          throw new Error(`Fallback API returned ${fallbackResponse.status}: ${fallbackResponse.statusText} (Original error: ${response.status} - ${response.statusText})`);
         }
         
         const fallbackData = await fallbackResponse.json();
@@ -425,6 +477,140 @@ async function fetchFromApi(productInfo) {
   }
 }
 
+// Fallback API function for testing when primary backend is down
+async function tryFallbackApi(productInfo) {
+  try {
+    // For faster testing, skip external APIs and generate test score directly
+    console.log("Generating test score directly for faster testing");
+    return generateTestScore(productInfo);
+    
+    // (External API code commented out for faster testing)
+    /*
+    // Try external sustainability API endpoints
+    const fallbackEndpoints = [
+      'https://api.sustainabilitydata.com/analyze',
+      'https://sustainability-api.herokuapp.com/score',
+      'https://api.ecodata.org/product/analyze'
+    ];
+    
+    for (const endpoint of fallbackEndpoints) {
+      try {
+        console.log(`Trying fallback endpoint: ${endpoint}`);
+        
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          mode: 'cors',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            brand: productInfo.brand,
+            name: productInfo.name,
+            specifications: productInfo.specifications || {},
+            details: productInfo.details || {},
+            description: productInfo.description || {}
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.score) {
+            return {
+              brand: productInfo.brand,
+              score: data.score,
+              co2e: data.co2e || 'unknown',
+              waterUsage: data.waterUsage || 'unknown',
+              wasteGenerated: data.wasteGenerated || 'unknown',
+              laborPractices: data.laborPractices || 'unknown',
+              certainty: 'fallback_api',
+              message: `Sustainability data from fallback API for ${productInfo.brand}`
+            };
+          }
+        }
+      } catch (endpointError) {
+        console.log(`Fallback endpoint ${endpoint} failed:`, endpointError);
+        continue;
+      }
+    }
+    */
+    
+    // If all external APIs fail, generate a test score based on scraped data
+    console.log("All fallback APIs failed, generating test score");
+    return generateTestScore(productInfo);
+    
+  } catch (error) {
+    console.error("Fallback API error:", error);
+    return null;
+  }
+}
+
+// Update generateTestScore to use new structure
+function generateTestScore(productInfo) {
+  let score = 50;
+  
+  // Analyze the plain text for sustainability clues
+  const allText = (productInfo.text || '').toLowerCase();
+  
+  console.log("Analyzing text for sustainability indicators:", allText.substring(0, 200));
+  
+  // Positive indicators
+  if (allText.includes('eco') || allText.includes('green') || allText.includes('sustainable')) {
+    score += 15;
+    console.log("Found eco/green/sustainable indicators +15");
+  }
+  if (allText.includes('recycled') || allText.includes('renewable')) {
+    score += 10;
+    console.log("Found recycled/renewable indicators +10");
+  }
+  if (allText.includes('energy efficient') || allText.includes('low power') || allText.includes('battery')) {
+    score += 10;
+    console.log("Found energy efficient indicators +10");
+  }
+  if (allText.includes('organic') || allText.includes('natural')) {
+    score += 8;
+    console.log("Found organic/natural indicators +8");
+  }
+  
+  // Quality indicators (suggest longer lifespan)
+  if (allText.includes('warranty') || allText.includes('durable') || allText.includes('quality')) {
+    score += 5;
+    console.log("Found quality indicators +5");
+  }
+  
+  // Brand-based adjustments (known sustainable brands)
+  const sustainableBrands = ['patagonia', 'tesla', 'fairphone', 'seventh generation', 'method', 'bose'];
+  if (sustainableBrands.some(b => allText.includes(b))) {
+    score += 20;
+    console.log("Found sustainable brand +20");
+  }
+  
+  // Category-based adjustments
+  if (allText.includes('electronics') && allText.includes('warranty')) score += 5;
+  if (allText.includes('clothing') && allText.includes('cotton')) score -= 5;
+  
+  // Negative indicators
+  if (allText.includes('disposable') || allText.includes('single use')) {
+    score -= 20;
+    console.log("Found disposable indicators -20");
+  }
+  
+  // Cap the score
+  score = Math.min(Math.max(score, 10), 100);
+  
+  console.log("Final calculated score:", score);
+  
+  return {
+    score: score,
+    co2e: score > 70 ? 'low' : score > 40 ? 'medium' : 'high',
+    waterUsage: score > 70 ? 'low' : score > 40 ? 'medium' : 'high',
+    wasteGenerated: score > 70 ? 'low' : score > 40 ? 'medium' : 'high',
+    laborPractices: score > 60 ? 'good' : score > 30 ? 'fair' : 'poor',
+    certainty: 'estimated',
+    message: `Test score generated from scraped data`,
+    scraped_text: productInfo.text || ''
+  };
+}
+
 // Handle extension icon badge updates
 function updateBadgeForTab(tabId, score) {
   let color;
@@ -436,13 +622,63 @@ function updateBadgeForTab(tabId, score) {
   chrome.action.setBadgeText({ text: score.toString(), tabId });
 }
 
-// Listen for toast requests
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "showToast" && message.message) {
-    if (typeof showToast === 'function') {
-      showToast(message.message, 4000);
+// Helper function to format product info as plain text (fallback if content.js doesn't provide it)
+function formatAsPlainText(info) {
+  let lines = [];
+  lines.push(`URL: ${info.url || ''}`);
+  lines.push(`Product Brand: ${info.brand || ''}`);
+  lines.push(`Product Name: ${info.name || ''}`);
+  
+  // Product Specifications - format as new lines for better readability
+  let specLines = [];
+  if (Array.isArray(info.specifications) && info.specifications.length > 0) {
+    // First check if there's a Category spec and put it first
+    const categorySpec = info.specifications.find(spec => 
+      spec && spec.header && spec.header.toLowerCase() === 'category');
+    
+    if (categorySpec) {
+      specLines.push(`Category: ${categorySpec.text}`);
     }
-    sendResponse({ success: true });
-    return true;
+    
+    // Then add all other specs
+    info.specifications.forEach(spec => {
+      if (spec && spec.header && spec.header.toLowerCase() !== 'category' && spec.text) {
+        specLines.push(`${spec.header}: ${spec.text}`);
+      } else if (spec && spec.text && !spec.header) {
+        specLines.push(spec.text);
+      }
+    });
   }
-});
+  
+  // Join specs with newlines for better structure
+  if (specLines.length > 0) {
+    lines.push(`Product Specifications:\n${specLines.join('\n')}`);
+  } else {
+    lines.push('Product Specifications:');
+  }
+  
+  // Product Description
+  let desc = '';
+  if (Array.isArray(info.description) && info.description.length > 0) {
+    desc = info.description
+      .map(item => (item && item.text) ? item.text : '')
+      .filter(Boolean)
+      .join('\n\n');
+  } else if (typeof info.description === 'object' && info.description && info.description.content) {
+    desc = info.description.content;
+  } else if (typeof info.description === 'string') {
+    desc = info.description;
+  }
+  
+  // Clean up description
+  if (desc) {
+    desc = desc.replace(/\xa0/g, ' ')
+               .replace(/\s+/g, ' ')
+               .replace(/\n\s*\n/g, '\n')
+               .trim();
+  }
+  
+  lines.push(`Product Description: ${desc || 'No description available'}`);
+  
+  return lines.join('\n');
+}
