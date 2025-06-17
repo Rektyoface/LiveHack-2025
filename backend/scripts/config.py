@@ -8,3 +8,18 @@ MONGO_SCORES_COLLECTION="scores"
 
 # LLM Configuration for Groq API
 GROQ_API_KEY="your_groq_api_key_here"
+
+# The master list of categories for your application
+APP_CATEGORIES = [
+    "Footwear",
+    "Apparel",
+    "Electronics",
+    "Home & Kitchen",
+    "Health & Beauty",
+    "Sports & Outdoors",
+    "Toys & Games",
+    "Books & Media",
+    "Groceries",
+    "Automotive",
+    "Unknown"
+]
