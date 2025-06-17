@@ -661,37 +661,41 @@ function generateTestScore(productInfo) {
 }
 
 // Handle extension icon badge updates
-async function updateBadgeForTab(tabId, backendDataOrScore) {
-  let score = backendDataOrScore;
-  if (typeof backendDataOrScore === 'object' && backendDataOrScore !== null) {
-    const breakdown = backendDataOrScore.sustainability_breakdown || backendDataOrScore.breakdown;
-    if (breakdown) {
-      const settingsData = await new Promise(resolve => {
-        chrome.storage.sync.get(['settings'], (result) => {
-          resolve(result.settings || {});
+async function updateBadgeForTab(tabId, backendDataOrScore, displayScoreFromContent) {
+  let score = displayScoreFromContent;
+  if (typeof score !== 'number') {
+    // fallback to old logic if not provided
+    score = backendDataOrScore;
+    if (typeof backendDataOrScore === 'object' && backendDataOrScore !== null) {
+      const breakdown = backendDataOrScore.sustainability_breakdown || backendDataOrScore.breakdown;
+      if (breakdown) {
+        const settingsData = await new Promise(resolve => {
+          chrome.storage.sync.get(['settings'], (result) => {
+            resolve(result.settings || {});
+          });
         });
-      });
-      const fieldWeightMap = {
-        production_and_brand: settingsData.production_and_brand || 5,
-        circularity_and_end_of_life: settingsData.circularity_and_end_of_life || 5,
-        material_composition: settingsData.material_composition || 5
-      };
-      const fieldOrder = [
-        'production_and_brand',
-        'circularity_and_end_of_life',
-        'material_composition'
-      ];
-      let weightedSum = 0;
-      let totalWeight = 0;
-      fieldOrder.forEach(key => {
-        const metricData = breakdown[key] || {};
-        let value = metricData.value || metricData.rating || "Unknown";
-        let fieldScore = typeof metricData.score === 'number' ? metricData.score : undefined;
-        let summaryScore = (value === "Unknown" && typeof fieldScore === 'number') ? 3 : (typeof fieldScore === 'number' ? fieldScore * fieldWeightMap[key] / 5 : 0);
-        weightedSum += summaryScore;
-        totalWeight += 1;
-      });
-      score = totalWeight > 0 ? Math.ceil((weightedSum / totalWeight) * 10) : undefined;
+        const fieldWeightMap = {
+          production_and_brand: settingsData.production_and_brand || 5,
+          circularity_and_end_of_life: settingsData.circularity_and_end_of_life || 5,
+          material_composition: settingsData.material_composition || 5
+        };
+        const fieldOrder = [
+          'production_and_brand',
+          'circularity_and_end_of_life',
+          'material_composition'
+        ];
+        let weightedSum = 0;
+        let totalWeight = 0;
+        fieldOrder.forEach(key => {
+          const metricData = breakdown[key] || {};
+          let value = metricData.value || metricData.rating || "Unknown";
+          let fieldScore = typeof metricData.score === 'number' ? metricData.score : undefined;
+          let summaryScore = (value === "Unknown" && typeof fieldScore === 'number') ? 3 : (typeof fieldScore === 'number' ? fieldScore * fieldWeightMap[key] / 5 : 0);
+          weightedSum += summaryScore;
+          totalWeight += 1;
+        });
+        score = totalWeight > 0 ? Math.ceil((weightedSum / totalWeight) * 10) : undefined;
+      }
     }
   }
   if (typeof score === 'number' && !isNaN(score)) {
@@ -767,4 +771,14 @@ function formatAsPlainText(info) {
   return lines.join('\n');
 }
 
-// All weighting is now handled in the frontend. No changes needed here.
+// Listen for direct badge update from content.js
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "setBadgeScoreFromContent" && typeof message.displayScore === 'number') {
+    if (sender && sender.tab && sender.tab.id) {
+      updateBadgeForTab(sender.tab.id, undefined, message.displayScore);
+    }
+    sendResponse && sendResponse({ success: true });
+    return true;
+  }
+  // ...existing code...
+});

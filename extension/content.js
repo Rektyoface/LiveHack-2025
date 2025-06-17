@@ -841,11 +841,11 @@
         Or click the extension icon in the toolbar
       </div>
     `;
-
-
-    
+    badge.style.opacity = '0';
     document.body.appendChild(badge);
-    console.log("EcoShop: Badge displayed");
+    setTimeout(() => { badge.style.transition = 'opacity 0.5s'; badge.style.opacity = '1'; }, 10);
+    // Update the browser action badge to match
+    chrome.runtime.sendMessage({ action: "setBadgeScoreFromContent", displayScore });
 
     // Disconnect the observer so the badge doesn't reappear after removal
     if (window.ecoshopObserver && typeof window.ecoshopObserver.disconnect === 'function') {
