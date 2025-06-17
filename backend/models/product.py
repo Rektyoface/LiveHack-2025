@@ -6,17 +6,19 @@ class Product:
     brandID: int
     ecoScore: int
     additionalInfo: str
-    itemIdentifier: int = field(init=False)  # prevent manual setting
+    listingID: int = field(init=False)  # prevent manual setting
+    sourceSite: str
 
     def __post_init__(self):
         # Automatically set itemIdentifier as concatenation of brandID and productID
-        self.itemIdentifier = int(f"{self.brandID}{self.productID}")
+        self.listingID = int(f"{self.brandID}{self.productID}")
 
     def to_dict(self):
         return {
             "productID": self.productID,
             "brandID": self.brandID,
-            "itemIdentifier": self.itemIdentifier,
+            "itemIdentifier": self.listingID, 
             "ecoScore": self.ecoScore,
-            "additionalInfo": self.additionalInfo
+            "additionalInfo": self.additionalInfo,
+            "sourceSite": self.sourceSite
         }
