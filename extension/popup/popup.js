@@ -2,28 +2,18 @@
 document.addEventListener('DOMContentLoaded', function() {
   // Elements
   chrome.storage.sync.get(['settings'], (data) => {
-  const seniorEnabled = data.settings?.seniorMode === true;
-  document.documentElement.setAttribute('data-senior', seniorEnabled ? 'true' : 'false');
-  console.log('✅ Applied senior mode:', seniorEnabled);
-  console.log('🔎 Final attribute:', document.documentElement.getAttribute('data-senior'));
-});
-
-
+    const seniorEnabled = data.settings?.seniorMode === true;
+    document.documentElement.setAttribute('data-senior', seniorEnabled ? 'true' : 'false');
+    console.log('✅ Applied senior mode:', seniorEnabled);
+    console.log('🔎 Final attribute:', document.documentElement.getAttribute('data-senior'));
+  });
 
   const loadingElement = document.getElementById('loading');
   const noProductElement = document.getElementById('no-product');
   const productInfoElement = document.getElementById('product-info');
   const brandNameElement = document.getElementById('brand-name');
   const scoreValueElement = document.getElementById('score-value');
-  const carbonValueElement = document.getElementById('carbon-value');
-  const carbonMetricElement = document.getElementById('carbon-metric');
-  const carbonMeterElement = document.getElementById('carbon-meter');
-  const waterMetricElement = document.getElementById('water-metric');
-  const waterMeterElement = document.getElementById('water-meter');
-  const wasteMetricElement = document.getElementById('waste-metric');
-  const wasteMeterElement = document.getElementById('waste-meter');
-  const laborMetricElement = document.getElementById('labor-metric');
-  const laborMeterElement = document.getElementById('labor-meter');
+  const sustainabilityMetricsContainer = document.getElementById('sustainability-metrics-container'); // New container
   const dataCertaintyElement = document.getElementById('data-certainty');
   const sustainabilityMessageElement = document.getElementById('sustainability-message');
   const alternativesListElement = document.getElementById('alternatives-list');
@@ -41,43 +31,29 @@ document.addEventListener('DOMContentLoaded', function() {
       setTheme(result.darkMode);
     } catch (error) {
       console.error("Error loading theme preference:", error);
-      // Default to dark mode
-      setTheme(true);
+      setTheme(true); // Default to dark mode
     }
   }
 
-  // Set theme on page
   function setTheme(isDarkMode) {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }
 
-  // Get current tab information
   chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
     if (tabs.length === 0) {
       showNoProductMessage();
       return;
     }
-
-    // Get the current tab
     const currentTab = tabs[0];
-    
-    // Display the current website
     const url = new URL(currentTab.url);
     websiteBadge.textContent = url.hostname;
-    
-    // Check if the URL is Shopee
     const isShopee = currentTab.url.includes('shopee.sg') || currentTab.url.includes('shopee.com');
-    
     if (!isShopee) {
       showNoProductMessage("Visit Shopee to see sustainability ratings");
       return;
     }
-    
-    // Request sustainability data for the current product
     chrome.tabs.sendMessage(currentTab.id, { action: "getProductInfo" }, function(response) {
-      // If we couldn't communicate with content script, try a different approach
       if (chrome.runtime.lastError || !response) {
-        // Direct request to service worker
         chrome.runtime.sendMessage({ 
           action: "checkCurrentPage", 
           url: currentTab.url,
@@ -85,8 +61,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, handleSustainabilityData);
         return;
       }
-      
-      // If we received product info from content script
       if (response.productInfo) {
         chrome.runtime.sendMessage({
           action: "checkSustainability",
@@ -97,11 +71,13 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   });
-  // Process and display sustainability data
+
   function handleSustainabilityData(response) {
+    console.log("popup.js: Received response in handleSustainabilityData:", response); // Existing log
+
     loadingElement.classList.add('hidden');
-    
     if (!response || !response.success) {
+      console.error("popup.js: Response unsuccessful or missing.", response); // Added for debugging
       if (response && response.error) {
         if (response.error.includes("Database connection")) {
           showNoProductMessage("Database connection required. Please check your internet connection and ensure the backend service is running.");
@@ -113,61 +89,85 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       return;
     }
-    
+
     const data = response.data;
+    console.log("popup.js: Data object:", data); // Added for debugging
+
     productInfoElement.classList.remove('hidden');
-    
-    // Apply score color
-    const scoreColor = getScoreColor(data.score);
+    const scoreColor = getScoreColor(data.default_sustainability_score);
     scoreValueElement.style.color = '#FFF';
     scoreValueElement.parentElement.style.backgroundColor = scoreColor;
-    
-    // Populate data
-    brandNameElement.textContent = data.brand || "Unknown Brand";
-    scoreValueElement.textContent = data.score || "N/A";
-    
-    // Carbon footprint
-    if (data.co2e) {
-      carbonValueElement.textContent = data.co2e;
-      const carbonPercent = Math.min(data.co2e / 10 * 100, 100);
-      carbonMeterElement.style.width = `${100 - carbonPercent}%`;
-      carbonMeterElement.style.backgroundColor = getInverseColor(carbonPercent);
+    brandNameElement.textContent = data.brand_name || "Unknown Brand";
+    scoreValueElement.textContent = data.default_sustainability_score || "N/A";
+
+    sustainabilityMetricsContainer.innerHTML = '';
+
+    // Use 'sustainability_breakdown' if present, else fallback to 'breakdown' (from backend)
+    const breakdown = data.sustainability_breakdown || data.breakdown;
+
+    if (breakdown) {
+      console.log("popup.js: sustainability_breakdown object:", breakdown); // Added for debugging
+      for (const key in breakdown) {
+        if (Object.hasOwnProperty.call(breakdown, key)) {
+          console.log("popup.js: Processing breakdown key:", key); // Added for debugging
+          const metricData = breakdown[key];
+          const metricElement = document.createElement('div');
+          metricElement.className = 'metric';
+
+          const title = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          const ratingValue = metricData.score * 10;
+          const analysisText = metricData.analysis;
+
+          metricElement.innerHTML = `
+            <h3>${title}</h3>
+            <div class="metric-value">Rating: ${ratingValue.toFixed(1)}/10</div>
+            <div class="meter">
+              <div class="meter-bar" style="width: ${ratingValue * 10}%; background-color: ${getScoreColor(ratingValue * 10)};"></div>
+            </div>
+            <button class="details-button" data-title="${title}" data-analysis='${JSON.stringify(analysisText)}'>Show Details</button>
+          `;
+          sustainabilityMetricsContainer.appendChild(metricElement);
+        }
+      }
+      document.querySelectorAll('.details-button').forEach(button => {
+        button.addEventListener('click', function() {
+          const title = this.dataset.title;
+          const analysis = JSON.parse(this.dataset.analysis);
+          chrome.storage.local.set({ sustainabilityDetails: { title, analysis } }, function() {
+            window.location.href = 'details.html';
+          });
+        });
+      });
+    } else {
+      // Always show the 3 default fields with placeholder values
+      const defaultFields = [
+        { key: 'production_and_brand', label: 'Production And Brand' },
+        { key: 'circularity_and_end_of_life', label: 'Circularity And End Of Life' },
+        { key: 'material_composition', label: 'Material Composition' }
+      ];
+      defaultFields.forEach(field => {
+        const metricElement = document.createElement('div');
+        metricElement.className = 'metric';
+        metricElement.innerHTML = `
+          <h3>${field.label}</h3>
+          <div class="metric-value">Rating: --/10</div>
+          <div class="meter">
+            <div class="meter-bar" style="width: 0%; background-color: #ccc;"></div>
+          </div>
+          <button class="details-button" disabled>Show Details</button>
+        `;
+        sustainabilityMetricsContainer.appendChild(metricElement);
+      });
     }
-    
-    // Water usage
-    if (data.waterUsage) {
-      waterMetricElement.textContent = capitalizeFirstLetter(data.waterUsage);
-      waterMeterElement.style.width = getPercentForRating(data.waterUsage);
-      waterMeterElement.style.backgroundColor = getColorForRating(data.waterUsage);
-    }
-    
-    // Waste generated
-    if (data.wasteGenerated) {
-      wasteMetricElement.textContent = capitalizeFirstLetter(data.wasteGenerated);
-      wasteMeterElement.style.width = getPercentForRating(data.wasteGenerated);
-      wasteMeterElement.style.backgroundColor = getColorForRating(data.wasteGenerated);
-    }
-    
-    // Labor practices
-    if (data.laborPractices) {
-      laborMetricElement.textContent = capitalizeFirstLetter(data.laborPractices);
-      laborMeterElement.style.width = getPercentForRating(data.laborPractices, true);
-      laborMeterElement.style.backgroundColor = getColorForRating(data.laborPractices, true);
-    }
-    
-    // Data certainty
-    if (data.certainty) {
+
+    if (data.certainty) { // Assuming certainty is still part of the response
       dataCertaintyElement.textContent = capitalizeFirstLetter(data.certainty);
     }
-    
-    // Sustainability message
-    if (data.message) {
+    if (data.message) { // Assuming message is still part of the response
       sustainabilityMessageElement.textContent = data.message;
     } else {
-      sustainabilityMessageElement.textContent = getDefaultMessage(data.score);
+      sustainabilityMessageElement.textContent = getDefaultMessage(data.default_sustainability_score);
     }
-    
-    // Alternatives
     if (data.alternatives && data.alternatives.length > 0) {
       alternativesListElement.innerHTML = '';
       data.alternatives.forEach(alt => {
@@ -178,7 +178,6 @@ document.addEventListener('DOMContentLoaded', function() {
           <div class="alternative-score" style="background-color: ${getScoreColor(alt.score)}">${alt.score}</div>
         `;
         altElement.addEventListener('click', () => {
-          // Open a link to this alternative product
           window.open(`https://www.google.com/search?q=${encodeURIComponent(alt.brand)}+sustainable+products`, '_blank');
         });
         alternativesListElement.appendChild(altElement);
@@ -196,76 +195,29 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function getScoreColor(score) {
+    if (score === null || score === undefined || isNaN(score)) return '#ccc'; // Default for N/A
     if (score >= 70) return '#4CAF50'; // Green
     if (score >= 40) return '#FFC107'; // Yellow/Amber
     return '#F44336'; // Red
   }
-  
-  function getInverseColor(percent) {
-    if (percent <= 30) return '#4CAF50'; // Green
-    if (percent <= 70) return '#FFC107'; // Yellow/Amber
-    return '#F44336'; // Red
-  }
-  
-  function getPercentForRating(rating, inverse = false) {
-    const map = {
-      'low': inverse ? '30%' : '75%',
-      'medium': '50%',
-      'high': inverse ? '75%' : '30%',
-      'very low': inverse ? '20%' : '90%',
-      'very high': inverse ? '90%' : '20%',
-      'unknown': '50%',
-      'good': '75%',
-      'fair': '50%',
-      'poor': '30%'
-    };
-    return map[rating.toLowerCase()] || '50%';
-  }
-  
-  function getColorForRating(rating, inverse = false) {
-    const lowValue = inverse ? 'poor' : 'low';
-    const highValue = inverse ? 'good' : 'high';
-    
-    if (rating.toLowerCase().includes(lowValue) || 
-        (inverse && rating.toLowerCase() === 'poor')) {
-      return '#F44336'; // Red
-    }
-    if (rating.toLowerCase().includes(highValue) || 
-        (inverse && rating.toLowerCase() === 'good')) {
-      return '#4CAF50'; // Green
-    }
-    if (rating.toLowerCase() === 'medium' || 
-        rating.toLowerCase() === 'fair' ||
-        rating.toLowerCase() === 'unknown') {
-      return '#FFC107'; // Yellow
-    }
-    return '#FFC107'; // Default to yellow
-  }
-  
+
   function capitalizeFirstLetter(string) {
     return string.charAt(0).toUpperCase() + string.slice(1);
   }
-  
+
   function getDefaultMessage(score) {
-    if (score >= 80) {
-      return "This brand demonstrates exceptional commitment to sustainability practices.";
-    } else if (score >= 60) {
-      return "This brand shows good sustainability practices but has room for improvement.";
-    } else if (score >= 40) {
-      return "This brand has average sustainability practices with significant opportunities for improvement.";
-    } else {
-      return "This brand has concerning sustainability practices and should be considered carefully.";
-    }
+    if (score === null || score === undefined || isNaN(score)) return "Sustainability information is not available.";
+    if (score >= 70) return "This product demonstrates strong sustainability practices.";
+    if (score >= 40) return "This product has average sustainability practices.";
+    return "This product has areas for improvement in sustainability.";
   }
-  // Button event listeners
-  optionsButton.addEventListener('click', () => {
+
+  optionsButton.addEventListener('click', function() {
     chrome.runtime.openOptionsPage();
   });
-  
-  learnMoreButton.addEventListener('click', () => {
-    window.open('https://example.com/about-sustainability-metrics', '_blank');
+
+  learnMoreButton.addEventListener('click', function() {
+    // Replace with your actual learn more link
+    window.open('https://example.com/learn-more-sustainability', '_blank');
   });
-
-  
-
 });

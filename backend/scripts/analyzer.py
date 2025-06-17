@@ -139,6 +139,7 @@ def get_full_product_analysis(raw_text: str) -> dict | None:
                 "category": convert_to_dict(analysis_args.get("category")),
                 "sustainability_analysis": convert_to_dict(analysis_args.get("sustainability_analysis")),
             }
+            logger.info(f"LLM final_json output: {json.dumps(final_json, indent=2)}")
             return final_json
         else:
             raise ValueError("LLM did not call the expected submission function.")
