@@ -195,15 +195,34 @@ document.addEventListener('DOMContentLoaded', function() {
       const scoreColor = getScoreColor(displayScore);
       scoreValueElement.style.color = '#FFF';
       scoreValueElement.parentElement.style.backgroundColor = scoreColor;
-      scoreValueElement.textContent = displayScore !== undefined ? displayScore : "Unknown";
-
-      // Show Details button logic
+      scoreValueElement.textContent = displayScore !== undefined ? displayScore : "Unknown";      // Show Details button logic
       const showDetailsButton = document.getElementById('show-details');
       showDetailsButton.disabled = false;
       showDetailsButton.onclick = function() {
         chrome.storage.local.set({ sustainabilityDetails: { allFields: detailsData } }, function() {
           window.location.href = 'details.html';
         });
+      }      // Show Recommendations button logic
+      const showRecommendationsButton = document.getElementById('show-recommendations');
+      const recommendations = data.recommendations || [];
+      
+      console.log('Recommendations from backend:', recommendations);
+      
+      if (recommendations.length > 0) {
+        showRecommendationsButton.disabled = false;
+        showRecommendationsButton.textContent = `View Recommendations (${recommendations.length})`;        showRecommendationsButton.onclick = function() {
+          console.log('Storing recommendations:', recommendations);
+          chrome.storage.local.set({ 
+            sustainabilityRecommendations: recommendations,
+            currentProductCategory: data.category || 'Unknown'
+          }, function() {
+            window.location.href = 'recommendations.html';
+          });
+        }
+      } else {
+        showRecommendationsButton.disabled = true;
+        showRecommendationsButton.textContent = 'No Recommendations Available';
+        showRecommendationsButton.style.opacity = '0.6';
       }
 
       if (data.certainty) { // Assuming certainty is still part of the response
