@@ -3,16 +3,21 @@ from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 import certifi
 import ssl
-# Import configuration variables from config.py
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Import configuration variables from config.py (same directory)
 try:
+    print("DEBUG: Attempting to import config from db.py...")
+    import os
+    print(f"DEBUG: db.py current working directory: {os.getcwd()}")
+    print(f"DEBUG: db.py file location: {os.path.abspath(__file__)}")
+    print(f"DEBUG: db.py directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     from config import MONGO_URI, MONGO_PRODUCTS_COLLECTION, MONGO_DB
+    print("DEBUG: config import successful in db.py")
     # Use the main collection as products collection for now
 
-except ImportError:
+except ImportError as e:
+    print(f"DEBUG: ImportError in db.py: {e}")
     print("Error: config.py not found or missing required variables.")
     # Set to None so the application can gracefully handle the missing config
     MONGO_URI = None

@@ -3,16 +3,15 @@ import json
 from groq import Groq
 import sys
 import os
+import config
 
-# Add the parent directory (backend) to sys.path
-# This allows direct imports of modules in the backend directory, like config.py
-current_script_path = os.path.abspath(__file__)
-scripts_dir = os.path.dirname(current_script_path)
-backend_dir = os.path.dirname(scripts_dir)
-sys.path.insert(0, backend_dir) # Insert at the beginning to ensure it's checked first
-
-# Now import config directly, as 'backend' is in sys.path
-from config import GROQ_API_KEY, APP_CATEGORIES 
+# If config.py is in the same directory (scripts) as analyzer.py:
+from config import GROQ_API_KEY, APP_CATEGORIES
+# The sys.path manipulations for finding config in a parent directory are removed,
+# as config.py is stated to be in the same 'scripts' directory.
+# The shopee_processor.py (which imports analyzer.py) should already handle 
+# adding the 'backend' directory to sys.path if necessary for other imports 
+# that analyzer.py might make (though currently it doesn't seem to make other local ones).
 
 client = Groq(api_key=GROQ_API_KEY)
 
