@@ -119,26 +119,37 @@ document.addEventListener('DOMContentLoaded', function() {
         showNoProductMessage("No sustainability data available");
       }
       return;
-    }
-
-    const data = response.data;
+    }    const data = response.data;
     console.log("popup.js: Data object:", data);
+    console.log("popup.js: Backend score value:", data.score);
+    console.log("popup.js: Backend score type:", typeof data.score);
 
-    productInfoElement.classList.remove('hidden');    // Use the backend score directly but ensure it matches badge calculation
-    const rawScore = typeof data.score === 'number' ? data.score : undefined;
-    const displayScore = rawScore !== undefined ? Math.ceil(rawScore) : undefined;
+    productInfoElement.classList.remove('hidden');
     
-    // Update the main score display
+    // IMPORTANT: Use the backend score directly - no frontend calculation
+    const backendScore = data.score;
+    let displayScore;
+    
+    if (typeof backendScore === 'number' && !isNaN(backendScore)) {
+      displayScore = Math.round(backendScore); // Round to nearest integer
+      console.log("popup.js: Using backend score:", displayScore);
+    } else {
+      displayScore = undefined;
+      console.log("popup.js: Backend score not available, showing Unknown");
+    }
+      // Update the main score display IMMEDIATELY with backend score
     const scoreColor = getScoreColor(displayScore);
     scoreValueElement.style.color = '#FFF';
     scoreValueElement.parentElement.style.backgroundColor = scoreColor;
     brandNameElement.textContent = data.brand_name || data.brand || "Unknown Brand";
     scoreValueElement.textContent = displayScore !== undefined ? displayScore : "Unknown";
 
+    console.log("popup.js: Updated main score display with:", displayScore);
+
     // Update the browser action badge to match the popup score
     chrome.runtime.sendMessage({ action: "setBadgeScore", score: displayScore });
 
-    // Render the breakdown details
+    // Render the breakdown details (but DON'T let this override the main score)
     sustainabilityMetricsContainer.innerHTML = '';
     const breakdown = data.sustainability_breakdown || data.breakdown;
     let detailsData = [];

@@ -147,23 +147,37 @@ def extract_and_rate_product():
             }), 500
         
         processing_time_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
-        
-        # 5. Prepare and send response
+          # 5. Prepare and send response
         # The structure of 'result' should match what the extension expects
         # Based on previous logs, it seems shopee_processor returns a dict that can be directly used.
+          # Debug the score extraction - check all possible score field names
+        sustainability_score = processed_result.get('sustainability_score')
+        alt_score = processed_result.get('score')
+        default_score = processed_result.get('default_sustainability_score')
+        
+        logger.info(f"DEBUG: sustainability_score from processor: {sustainability_score}")
+        logger.info(f"DEBUG: alt score field: {alt_score}")
+        logger.info(f"DEBUG: default_sustainability_score: {default_score}")
+        logger.info(f"DEBUG: processed_result keys: {list(processed_result.keys())}")
+        
+        # Use the first available score, prioritizing sustainability_score
+        final_score = sustainability_score if sustainability_score is not None else (alt_score if alt_score is not None else (default_score if default_score is not None else 0))
+        logger.info(f"DEBUG: Final score being sent to frontend: {final_score}")
+        
         final_response_data = {
             'url': product_url or processed_result.get('url'), # Prioritize initially parsed URL
             'brand': processed_result.get('brand', 'Unknown'),
             'brand_name': processed_result.get('brand', 'Unknown'),  # For consistency with frontend
             'name': processed_result.get('product_name', processed_result.get('name', 'Unknown')),
             'category': processed_result.get('category', 'Unknown'),
-            'score': processed_result.get('sustainability_score', 0),
+            'score': final_score,
             'breakdown': processed_result.get('sustainability_breakdown', {}),
             'sustainability_breakdown': processed_result.get('sustainability_breakdown', {}),  # For consistency
             'recommendations': processed_result.get('recommendations', []),
             'raw_llm_response': processed_result.get('raw_llm_response', None), # For debugging LLM
             'processing_time_ms': processing_time_ms,
-            'timestamp': datetime.now(timezone.utc).isoformat() + 'Z'        }
+            'timestamp': datetime.now(timezone.utc).isoformat() + 'Z'
+        }
         
         logger.info(f"--- FINAL RESPONSE TO EXTENSION (from shopee_processor) ---")
         logger.info(f"RESPONSE JSON: {json.dumps({'success': True, 'data': final_response_data}, indent=2)}")

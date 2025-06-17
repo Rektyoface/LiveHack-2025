@@ -374,13 +374,13 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
       }
       sendResponse({ success: true, data });
       return;
-    }
-      // 1. Try backend API
+    }    // 1. Try backend API
     try {
       const apiData = await fetchFromApi(transformed, productInfo.brand);
       if (apiData) {
         console.log("=== SERVICE WORKER: SENDING TO POPUP ===");
         console.log("Data being sent to popup:", JSON.stringify(apiData, null, 2));
+        console.log("Specifically, score being sent:", apiData.score);
         
         if (cacheKey) sustainabilityCache[cacheKey] = apiData;
         if (sender?.tab?.id) {
@@ -388,7 +388,11 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
           tabDataCache[sender.tab.id] = apiData;
           sendToastToTab(sender.tab.id, `EcoShop: Analysis complete! Score: ${apiData.score}`);
         }
-        sendResponse({ success: true, data: apiData });
+        
+        // Ensure we're sending a proper response structure
+        const responseToSend = { success: true, data: apiData };
+        console.log("Service worker sending response:", responseToSend);
+        sendResponse(responseToSend);
         return;
       }
     } catch (apiError) {
@@ -449,9 +453,8 @@ async function fetchFromApi(transformedTextPayload, brandForFallback) {
     console.log("Using API endpoint for POST:", postApiUrl);
     console.log("Sending product text:", transformedTextPayload.text);
     console.log("Text length:", transformedTextPayload.text?.length);
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // Increased to 30 seconds
     
     try {
       console.log("Making API request to:", postApiUrl);
@@ -500,10 +503,11 @@ async function fetchFromApi(transformedTextPayload, brandForFallback) {
         const responseData = await response.json();
       console.log("=== SERVICE WORKER: RAW API RESPONSE ===");
       console.log("API response:", JSON.stringify(responseData, null, 2));
-      
-      if (responseData && responseData.data) {
+        if (responseData && responseData.data) {
         console.log("=== SERVICE WORKER: API DATA DETAILED ===");
         console.log("Data keys:", Object.keys(responseData.data));
+        console.log("Score from backend:", responseData.data.score);
+        console.log("Score type:", typeof responseData.data.score);
         console.log("Recommendations in response:", responseData.data.recommendations);
         console.log("Recommendations count:", responseData.data.recommendations ? responseData.data.recommendations.length : 0);
         

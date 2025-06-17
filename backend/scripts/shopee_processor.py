@@ -32,11 +32,17 @@ def get_recommendations(category: str, current_listing_id: str) -> list:
 
     Args:
         category: The category to search within.
-        current_listing_id: The ID of the product being viewed, to exclude it.    Returns:
+        current_listing_id: The ID of the product being viewed, to exclude it.
+
+    Returns:
         A list of up to 3 recommendation dictionaries with 'url' and 'score'.
     """
-    if not products_collection or category == "Unknown":
+    if products_collection is None or category == "Unknown":
         logger.warning("Cannot get recommendations, database not connected or category is Unknown.")
+        return []
+    
+    if not current_listing_id:
+        logger.warning("Cannot get recommendations, current_listing_id is empty.")
         return []
 
     try:
@@ -156,14 +162,20 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         )
         logger.info(f"Personalized score calculated: {personalized_score}")
         
-        # Update the score in the document we are about to return to the user
-        existing_product['sustainability_score'] = personalized_score
+        # Update the score in the document we are about to return to the user        existing_product['sustainability_score'] = personalized_score
 
-        recommendations = get_recommendations(
-            existing_product.get('category', 'Unknown'),
-            existing_product.get('listing_id')
-        )
-        existing_product['recommendations'] = recommendations
+        # Get recommendations with error handling
+        try:
+            logger.info("Getting recommendations for cached product...")
+            recommendations = get_recommendations(
+                existing_product.get('category', 'Unknown'),
+                existing_product.get('listing_id', '')
+            )
+            logger.info(f"Retrieved {len(recommendations)} recommendations")
+            existing_product['recommendations'] = recommendations
+        except Exception as rec_error:
+            logger.error(f"Error getting recommendations: {rec_error}")
+            existing_product['recommendations'] = []
           # Clean up the document before sending it back to the API
         # The user doesn't need to see the default score or the internal _id
         if 'default_sustainability_score' in existing_product:
@@ -251,11 +263,18 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         response_document['sustainability_score'] = personalized_score
         logger.info(f"Personalized score: {personalized_score}")
 
-        recommendations = get_recommendations(
-            response_document.get('category', 'Unknown'),
-            response_document.get('listing_id')
-        )
-        response_document['recommendations'] = recommendations
+        # Get recommendations with error handling
+        try:
+            logger.info("Getting recommendations...")
+            recommendations = get_recommendations(
+                response_document.get('category', 'Unknown'),
+                response_document.get('listing_id', '')
+            )
+            logger.info(f"Retrieved {len(recommendations)} recommendations")
+            response_document['recommendations'] = recommendations
+        except Exception as rec_error:
+            logger.error(f"Error getting recommendations: {rec_error}")
+            response_document['recommendations'] = []
         
         # Clean up the response document by removing fields not needed by frontend
         del response_document['default_sustainability_score']
@@ -291,19 +310,24 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
                     existing_doc['sustainability_breakdown']
                 )
                 # Prepare response document
-                existing_doc['sustainability_score'] = personalized_score
-                  # Clean up the document before returning
+                existing_doc['sustainability_score'] = personalized_score                # Clean up the document before returning
                 if 'default_sustainability_score' in existing_doc:
                     del existing_doc['default_sustainability_score']
                 if '_id' in existing_doc:
                     del existing_doc['_id']
                 
-                # Add recommendations
-                recommendations = get_recommendations(
-                    existing_doc.get('category', 'Unknown'),
-                    existing_doc.get('listing_id')
-                )
-                existing_doc['recommendations'] = recommendations
+                # Add recommendations with error handling
+                try:
+                    logger.info("Getting recommendations for duplicate product...")
+                    recommendations = get_recommendations(
+                        existing_doc.get('category', 'Unknown'),
+                        existing_doc.get('listing_id', '')
+                    )
+                    logger.info(f"Retrieved {len(recommendations)} recommendations")
+                    existing_doc['recommendations'] = recommendations
+                except Exception as rec_error:
+                    logger.error(f"Error getting recommendations: {rec_error}")
+                    existing_doc['recommendations'] = []
                 
                 logger.info("SUCCESS: Process completed (DUPLICATE -> CACHE HIT)")
                 logger.info(f"Returning existing product with personalized score: {personalized_score}")
