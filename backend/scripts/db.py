@@ -4,8 +4,15 @@ from pymongo.errors import ConnectionFailure
 import certifi
 import ssl
 # Import configuration variables from config.py
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 try:
-    from config import MONGO_URI, MONGO_DB, MONGO_PRODUCTS_COLLECTION
+    from config import MONGO_URI, MONGO_DB_NAME, MONGO_COLLECTION_NAME
+    # Use the main collection as products collection for now
+    MONGO_PRODUCTS_COLLECTION = MONGO_COLLECTION_NAME
+    MONGO_DB = MONGO_DB_NAME
 except ImportError:
     print("Error: config.py not found or missing required variables.")
     # Set to None so the application can gracefully handle the missing config
@@ -34,10 +41,9 @@ def connect_to_db():
             # Get the database and collection
             db = client[MONGO_DB]
             products_collection = db[MONGO_PRODUCTS_COLLECTION]
-            
-            # CRUCIAL: Create the unique index for efficient lookups
+              # CRUCIAL: Create the unique index for efficient lookups
             print(f"Ensuring unique index exists on collection: '{MONGO_PRODUCTS_COLLECTION}'...")
-            products_collection.create_index([("source_site", 1), ("source_product_id", 1)], unique=True)
+            products_collection.create_index([("source_site", 1), ("listing_id", 1)], unique=True)
             print("Index is ready.")
 
             return products_collection
