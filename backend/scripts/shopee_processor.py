@@ -8,10 +8,14 @@
 # We import the database connection, the URL parser, the LLM analyzer,
 # and all the necessary functions and constants from the scorer.
 
-from db import products_collection
-from url_parser import parse_shopee_url
-from analyzer import get_full_product_analysis
-from scorer import generate_sustainability_breakdown, calculate_weighted_score, DEFAULT_WEIGHTS
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from scripts.db import products_collection
+from scripts.url_parser import parse_shopee_url
+from scripts.analyzer import get_full_product_analysis
+from scripts.scorer import generate_sustainability_breakdown, calculate_weighted_score, DEFAULT_WEIGHTS
 
 
 # --- Step 2: Define the main processing function ---

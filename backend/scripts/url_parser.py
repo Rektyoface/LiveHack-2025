@@ -1,4 +1,5 @@
 # url_parser.py (Simple, No-Import Version)
+import re
 
 def parse_shopee_url(url: str) -> dict | None:
     """
@@ -55,6 +56,99 @@ def parse_shopee_url(url: str) -> dict | None:
 
     except (IndexError, AttributeError):
         # This will catch errors if the URL is malformed and split() doesn't work as expected
+        return None
+
+def extract_url_from_request(request) -> str | None:
+    """
+    Extract product URL from various request formats.
+    
+    Args:
+        request: Flask request object
+        
+    Returns:
+        Product URL if found, None otherwise
+    """
+    try:
+        if request.content_type == 'application/json':
+            data = request.get_json()
+            if data and 'url' in data:
+                return data['url']
+        elif 'text/plain' in request.content_type:
+            raw_data = request.get_data(as_text=True)
+            # Try to extract URL from the text
+            url_match = re.search(r"URL: (https?://.*?)(\s|$|\n)", raw_data)
+            if url_match:
+                return url_match.group(1).strip()
+        return None
+    except Exception:
+        return None
+
+def extract_text_from_request(request) -> str | None:
+    """
+    Extract product text content from various request formats.
+    
+    Args:
+        request: Flask request object
+        
+    Returns:
+        Product text content if found, None otherwise
+    """
+    try:
+        if request.content_type == 'application/json':
+            data = request.get_json()
+            if not data:
+                return None
+                
+            # If plainText is provided, use it directly
+            if 'plainText' in data:
+                return data['plainText']
+            
+            # Otherwise construct from various fields
+            elif 'name' in data or 'brand' in data or 'specifications' in data or 'description' in data:
+                text_parts = []
+                
+                if 'url' in data:
+                    text_parts.append(f"URL: {data['url']}")
+                
+                if 'brand' in data:
+                    text_parts.append(f"Product Brand: {data['brand']}")
+                    
+                if 'name' in data:
+                    text_parts.append(f"Product Name: {data['name']}")
+                
+                # Add specifications
+                if 'specifications' in data and data['specifications']:
+                    specs = data['specifications']
+                    spec_parts = ["Product Specifications:"]
+                    
+                    for spec in specs:
+                        if isinstance(spec, dict) and 'header' in spec and 'text' in spec:
+                            spec_parts.append(f"{spec['header']}: {spec['text']}")
+                        elif isinstance(spec, str):
+                            spec_parts.append(spec)
+                    
+                    text_parts.append('\n'.join(spec_parts))
+                
+                # Add description
+                if 'description' in data and data['description']:
+                    desc = data['description']
+                    desc_parts = ["Product Description:"]
+                    
+                    for d in desc:
+                        if isinstance(d, dict) and 'text' in d:
+                            desc_parts.append(d['text'])
+                        elif isinstance(d, str):
+                            desc_parts.append(d)
+                    
+                    text_parts.append('\n'.join(desc_parts))
+                
+                return '\n'.join(text_parts)
+                
+        elif 'text/plain' in request.content_type:
+            return request.get_data(as_text=True)
+        
+        return None
+    except Exception:
         return None
 
 # This block allows you to test the file directly by running `python url_parser.py`

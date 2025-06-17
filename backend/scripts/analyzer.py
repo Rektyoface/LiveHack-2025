@@ -1,6 +1,9 @@
 # analyzer.py
 import json
 from groq import Groq
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import GROQ_API_KEY, APP_CATEGORIES # Import your new list
 
 client = Groq(api_key=GROQ_API_KEY)

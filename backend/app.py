@@ -19,10 +19,12 @@ from pymongo.errors import ConnectionFailure
 from dotenv import load_dotenv
 # Import the cleaned export function
 from scripts.export_to_mongo import export_product_to_mongo
+# Import utility functions
+from scripts.utils import clean_specifications, generate_sustainability_advice
 
 # Import new modules
 from watch import stream_task_changes, create_task_document, update_task_status
-import backend.scripts.config as config
+import config  # Import from local config.py
 
 # Load environment variables from .env file if present
 load_dotenv()
@@ -75,23 +77,27 @@ def get_mongo_client():
     return mongo_client
 
 def load_sustainability_data() -> List[Dict[str, Any]]:
-    """Load sustainability data from the JSON file."""
+    """Load sustainability data from MongoDB."""
     global sustainability_data
     
-    if sustainability_data is None:
+    # Always return empty list as we're removing local fallback
+    # All data will come from MongoDB
+    sustainability_data = []
+    
+    # Try to fetch data from MongoDB if available
+    client = get_mongo_client()
+    if client:
         try:
-            # In production, we don't rely on local JSON files
-            # This is only used for the simple brand lookup fallback endpoint
-            if os.path.exists(DATA_FILE):
-                with open(DATA_FILE, 'r') as f:
-                    sustainability_data = json.load(f)
-                logger.info(f"Loaded {len(sustainability_data)} brand records from {DATA_FILE}")
-            else:
-                logger.info("No local JSON file found - using database-only mode")
-                sustainability_data = []
+            db = client[config.MONGO_DB_NAME]
+            collection = db[config.MONGO_COLLECTION_NAME]
+            # Fetch brands with sustainability data
+            cursor = collection.find({}, {"brand": 1, "score": 1})
+            sustainability_data = list(cursor)
+            logger.info(f"Loaded {len(sustainability_data)} brand records from MongoDB")
         except Exception as e:
-            logger.warning(f"Could not load JSON data file: {str(e)} - using database-only mode")
-            sustainability_data = []
+            logger.warning(f"Could not load sustainability data from MongoDB: {str(e)}")
+    else:
+        logger.warning("MongoDB client not available - unable to load sustainability data")
     
     return sustainability_data
 
@@ -187,40 +193,7 @@ def get_brand_score():
     return jsonify({
         'success': False,
         'error': f'No sustainability data available for brand: {brand_query}',
-        'message': 'Brand not found in database'
-    }), 404
-
-def clean_specifications(specs):
-    """Remove review and rating text from product specifications."""
-    if isinstance(specs, dict):
-        cleaned = {}
-        for k, v in specs.items():
-            # Remove keys that are obviously reviews/ratings
-            if any(word in k.lower() for word in ["review", "rating", "comment", "report abuse", "5.0 out of 5", "star", "media", "helpful?"]):
-                continue
-            # Remove values that contain review/rating patterns
-            if isinstance(v, str):
-                lower_v = v.lower()
-                if any(word in lower_v for word in ["review", "ratings", "comments", "report abuse", "5.0 out of 5", "star", "media", "helpful?"]):
-                    # Truncate at the first review keyword
-                    for word in ["review", "ratings", "comments", "report abuse", "5.0 out of 5", "star", "media", "helpful?"]:
-                        idx = lower_v.find(word)
-                        if idx != -1:
-                            v = v[:idx]
-                            break
-                cleaned[k] = v.strip()
-            else:
-                cleaned[k] = v
-        return cleaned
-    elif isinstance(specs, str):
-        # Remove review/rating text from a string
-        lower_s = specs.lower()
-        for word in ["review", "ratings", "comments", "report abuse", "5.0 out of 5", "star", "media", "helpful?"]:
-            idx = lower_s.find(word)
-            if idx != -1:
-                return specs[:idx].strip()
-        return specs
-    return specs
+        'message': 'Brand not found in database'    }), 404
 
 @app.route('/api/product', methods=['POST'])
 def process_product():
@@ -471,38 +444,18 @@ def analyze_score():
         }
     })
 
-def generate_sustainability_advice(factors: Dict[str, float]) -> Dict[str, str]:
-    """Generate specific advice based on sustainability factors."""
-    advice = {}
-    
-    if factors['co2e'] > 7:
-        advice['co2e'] = "Consider reducing carbon emissions through supply chain optimizations and renewable energy."
-    
-    if factors['water_usage'] > 7:
-        advice['water'] = "Implement water conservation practices in manufacturing and processing."
-    
-    if factors['waste'] > 7:
-        advice['waste'] = "Develop circular economy practices and reduce packaging waste."
-    
-    if factors['labor'] < 5:
-        advice['labor'] = "Improve labor conditions and ensure fair wages throughout the supply chain."
-    
-    if factors['recycled_materials'] < 30:
-        advice['materials'] = "Increase use of recycled and sustainably sourced materials."
-    
-    return advice
-
 @app.route('/api/mongodb/status')
 def mongodb_status():
     """Check MongoDB connection status."""
     client = get_mongo_client()
-    if client:        return jsonify({
+    if client:
+        return jsonify({
             'success': True,
             'status': 'connected',
-            'database': config.MONGO_DB,
+            'database': config.MONGO_DB_NAME,
             'collections': {
-                'products': config.MONGO_PRODUCTS_COLLECTION,
-                'scores': config.MONGO_SCORES_COLLECTION
+                'main': config.MONGO_COLLECTION_NAME,
+                'tasks': config.MONGO_TASKS_COLLECTION
             }
         })
     else:
@@ -537,13 +490,12 @@ def configure_mongodb():
         
         # Test the connection
         test_client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
-        test_client.admin.command('ping')
-        # If successful, update our config
+        test_client.admin.command('ping')        # If successful, update our config
         with open('.env', 'w') as env_file:
             env_file.write(f"MONGO_URI={mongo_uri}\n")
-            env_file.write(f"MONGO_DB={data.get('db', config.MONGO_DB)}\n")
-            env_file.write(f"MONGO_PRODUCTS_COLLECTION={data.get('products_collection', config.MONGO_PRODUCTS_COLLECTION)}\n")
-            env_file.write(f"MONGO_SCORES_COLLECTION={data.get('scores_collection', config.MONGO_SCORES_COLLECTION)}\n")
+            env_file.write(f"MONGO_DB_NAME={data.get('db', config.MONGO_DB_NAME)}\n")
+            env_file.write(f"MONGO_COLLECTION_NAME={data.get('collection', config.MONGO_COLLECTION_NAME)}\n")
+            env_file.write(f"MONGO_TASKS_COLLECTION={data.get('tasks_collection', config.MONGO_TASKS_COLLECTION)}\n")
         
         # Reset client so it will be reinitialized with new settings
         mongo_client = None
@@ -822,175 +774,81 @@ def catch_all(path):
 
 @app.route('/extract_and_rate', methods=['POST'])
 def extract_and_rate_product():
-    """Extract product info, rate it, and store it."""
+    """
+    Main endpoint for browser extension to extract product info and rate sustainability.
+    This function coordinates with the shopee_processor module for all analysis.
+    """
     try:
-        # Log raw request body for debugging
-        raw_data = request.get_data(as_text=True)
-        logger.info(f'EXT PAYLOAD {request.path}: {raw_data[:500]}')
-
-        data = {}
+        # Log minimal request info 
+        logger.info(f'Request received: {request.path} [{request.content_type}]')
+        
+        # Track processing start time
+        start_time = datetime.datetime.utcnow()
+        
+        # Import the processor module
+        try:
+            from scripts.shopee_processor import process_shopee_product
+            from scripts.url_parser import extract_text_from_request, extract_url_from_request
+            logger.info("Successfully imported processing modules")
+        except ImportError as e:
+            logger.error(f"Failed to import processing modules: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': 'Backend processing modules unavailable'
+            }), 500
+        
+        # Step 1: Parse the incoming data using dedicated parser functions
+        product_url = extract_url_from_request(request)
+        raw_text_content = extract_text_from_request(request)
+        
+        # Extract user weights if provided
+        user_weights = None
         if request.content_type == 'application/json':
             data = request.get_json()
-            if not data:
-                logger.warning("Empty JSON payload received.")
-                return jsonify({'success': False, 'error': 'Empty JSON payload'}), 400
-        elif 'text/plain' in request.content_type: # More robust check for text/plain
-            logger.info(f"Received text/plain data. Attempting to parse.")
-            if raw_data:
-                try:
-                    # Attempt to parse the "key=value, key=value" format
-                    # This specifically looks for URL, Brand, Name, Product Specs
-                    parsed_data = {}
-                    # Split by common delimiters, handling cases where some might be missing
-                    # A more robust parser might be needed for complex cases
-                    
-                    # Try to extract known fields first
-                    url_match = re.search(r"URL: (.*?)(, Brand:|, Name:|, Product Specs:|$)", raw_data)
-                    brand_match = re.search(r"Brand: (.*?)(, URL:|, Name:|, Product Specs:|$)", raw_data)
-                    name_match = re.search(r"Name: (.*?)(, URL:|, Brand:|, Product Specs:|$)", raw_data)
-                    specs_match = re.search(r"Product Specs: (.*)", raw_data)
-
-                    if url_match and url_match.group(1):
-                        parsed_data['url'] = url_match.group(1).strip()
-                    if brand_match and brand_match.group(1):
-                        parsed_data['brand'] = brand_match.group(1).strip()
-                    if name_match and name_match.group(1):
-                        parsed_data['name'] = name_match.group(1).strip()
-                    
-                    # For specifications, assume it's the rest of the string after "Product Specs: "
-                    # And then try to parse it as "Key1Value1: Key2Value2" (if that's the intended format)
-                    if specs_match and specs_match.group(1):
-                        specs_string = specs_match.group(1).strip()
-                        # If specs_string is "CategoryShopeeVideo GamesPlaystationGames: Stock184"
-                        # This needs a specific parser or to be sent to LLM as is.
-                        # For now, let's put it into an array of objects as content.js might send for JSON
-                        parsed_data['specifications'] = [{'header': 'Raw Specifications', 'text': specs_string}]
-                    else:
-                        parsed_data['specifications'] = []
-                        
-                    parsed_data['description'] = [] # Assuming no separate description in this text format
-
-                    data = parsed_data
-                    if not data.get('url') and not data.get('name'): # Check if parsing yielded anything useful
-                        logger.warning(f"Could not effectively parse text/plain data into key-value pairs: {raw_data}")
-                        data = {"raw_text_content": raw_data} # Fallback to sending raw text
-                    else:
-                        logger.info(f"Successfully parsed text/plain data: {data}")
-                        
-                except Exception as e:
-                    logger.error(f"Error parsing text/plain data: {e}. Falling back to raw_text_content.")
-                    data = {"raw_text_content": raw_data}
-            else:
-                logger.warning("Empty text/plain payload received.")
-                data = {"raw_text_content": ""} # Treat as empty raw text
-        else:
-            logger.warning(f"Unsupported content type: {request.content_type}")
-            return jsonify({'success': False, 'error': f'Unsupported content type: {request.content_type}'}), 415
-
-        product_url = data.get('url')
-        product_brand = data.get('brand')
-        product_name = data.get('name')
-        # Ensure specs and desc are lists, even if not present in 'data'
-        product_specs = data.get('specifications', []) 
-        product_desc = data.get('description', [])   
-        raw_text_content = data.get('raw_text_content')
-
-        if not product_url and not raw_text_content and not product_name: # Added product_name check
-            logger.warning("Missing product URL, name, or raw text content in request.")
-            return jsonify({'success': False, 'error': 'Missing product URL, name, or raw text content'}), 400
-
-        combined_details = ""
-        # Process structured data if available
-        if product_url or product_brand or product_name:
-            logger.info(f"Processing data for URL: {product_url}, Brand: {product_brand}, Name: {product_name}")
-            
-            if isinstance(product_specs, list):
-                for spec in product_specs:
-                    if isinstance(spec, dict) and 'header' in spec and 'text' in spec:
-                        combined_details += f"{spec['header']}: {spec['text']}\\n"
-                    elif isinstance(spec, str): # Handle if specs are just strings
-                        combined_details += f"{spec}\\n"
-            elif isinstance(product_specs, str): # Handle if specs is a single string
-                combined_details += f"Specifications: {product_specs}\\n"
-
-
-            if isinstance(product_desc, list):
-                for desc_item in product_desc:
-                    if isinstance(desc_item, dict) and 'header' in desc_item and 'text' in desc_item:
-                        combined_details += f"{desc_item['header']}: {desc_item['text']}\\n"
-                    elif isinstance(desc_item, str):
-                        combined_details += f"{desc_item}\\n"
-            elif isinstance(product_desc, str):
-                combined_details += f"Description: {product_desc}\\n"
-            
-            # If raw_text_content was the primary source and got parsed into fields,
-            # we might not need to append it again unless it contains more.
-            # However, if raw_text_content exists AND combined_details is still empty, use raw_text.
-            if not combined_details and raw_text_content:
-                logger.info("Using raw_text_content for details as structured parsing was minimal.")
-                combined_details = raw_text_content
-            elif raw_text_content and raw_text_content not in combined_details:
-                # This case is if raw_text was a fallback and we also have some parsed details
-                # We might want to append it if it's different or provides more context
-                # For now, let's assume parsed details are preferred if they exist.
-                pass
-
-
-            # Placeholder for LLM call
-            # score, reasoning = llm.rate_sustainability_from_text(product_name, product_brand, combined_details)
-            score = 50 # Dummy score
-            reasoning = "Dummy reasoning based on combined details."
-            if not combined_details.strip(): # Check if combined_details is empty or just whitespace
-                reasoning = "No detailed specifications or description provided for LLM analysis."
-                logger.info("No combined details for LLM from structured data.")
-            else:
-                logger.info(f"Combined details for LLM:\\n{combined_details}")
-
-
-        elif raw_text_content: # This case should ideally be covered by the text/plain parsing now
-            logger.info(f"Processing raw text content directly (fallback).")
-            combined_details = raw_text_content # Use raw_text_content for LLM
-            # score, reasoning = llm.rate_sustainability_from_raw_text(raw_text_content)
-            score = 40 # Dummy score for raw text
-            reasoning = "Dummy reasoning based on raw text content."
-            logger.info(f"Raw text for LLM:\\n{raw_text_content}")
-        else:
-            logger.warning("Insufficient data for processing after attempting all parsing.")
-            return jsonify({'success': False, 'error': 'Insufficient data for processing'}), 400
-
-        # ... (rest of the function: database interaction, task creation, etc.)
-        # For now, just return the dummy score and reasoning
-        result = {
-            'brand': product_brand,
-            'name': product_name,
-            'url': product_url,
-            'score': score,
-            'reasoning': reasoning,
-            'raw_data_received': raw_data, # Include the originally received raw data for reference
-            'processed_details_for_llm': combined_details, # Details sent to LLM
-            'last_updated': datetime.datetime.utcnow().isoformat() + 'Z'
-        }
-
-        # Optionally, store this result in MongoDB
-        client = get_mongo_client()
-        if client:
-            try:
-                db = client[config.MONGO_DB_NAME]
-                collection = db[config.MONGO_COLLECTION_NAME]
-                # Use a unique identifier for the product, e.g., URL or a hash
-                # For simplicity, using URL as the main identifier here
-                if product_url: # Only upsert if we have a URL
-                    update_result = collection.update_one(
-                        {'url': product_url},
-                        {'$set': result},
-                        upsert=True
-                    )
-                    logger.info(f"Data for {product_url} {'updated' if update_result.matched_count else 'inserted'} in MongoDB.")
-                else:
-                    logger.info("No product URL, skipping MongoDB upsert for this request.")
-            except Exception as e:
-                logger.error(f"MongoDB operation failed: {e}")
+            if data and 'user_weights' in data and isinstance(data['user_weights'], dict):
+                user_weights = data['user_weights']
         
+        # Step 2: Validate that we have enough data to process
+        if not product_url and not raw_text_content:
+            logger.warning("Missing both product URL and raw text content in request")
+            return jsonify({
+                'success': False, 
+                'error': 'Missing required data: need either product URL or text content'
+            }), 400
+        
+        # Step 3: Process the product using the dedicated processor
+        logger.info(f"Processing product - URL: {product_url or 'Not provided'}, text length: {len(raw_text_content) if raw_text_content else 0}")
+        
+        processed_result = process_shopee_product(
+            url=product_url,
+            raw_text=raw_text_content,
+            user_weights=user_weights
+        )
+        
+        # Step 4: Check results and prepare response
+        if not processed_result:
+            logger.warning("Product processing failed or returned no data")
+            return jsonify({
+                'success': False,
+                'error': 'Product analysis failed - check database connection and API keys'
+            }), 500
+        
+        # Step 5: Prepare the response to send back to the extension
+        processing_time_ms = (datetime.datetime.utcnow() - start_time).total_seconds() * 1000        
+        # Create the result from the processed data
+        result = {
+            'url': product_url,
+            'brand': processed_result.get('brand', 'Unknown'),
+            'name': processed_result.get('product_name', 'Unknown'),
+            'category': processed_result.get('category', 'Unknown'),
+            'score': processed_result.get('sustainability_score', 0),
+            'breakdown': processed_result.get('sustainability_breakdown', {}),
+            'processing_time_ms': processing_time_ms,
+            'timestamp': datetime.datetime.utcnow().isoformat() + 'Z'
+        }
+        
+        # Return the processed result
+        logger.info(f"Successfully processed product: {result.get('name', 'Unknown')}")
         return jsonify({'success': True, 'data': result})
 
     except Exception as e:
@@ -1054,16 +912,90 @@ def rate_product():
             rating = "Good"
         elif final_score >= 50:
             rating = "Fair"
+            
+        # Prepare result data
+        result_data = {
+            'score': final_score,
+            'rating': rating,
+            'factors': factors,
+            'weights': weights,
+            'advice': generate_sustainability_advice(factors),
+            'timestamp': datetime.datetime.utcnow()
+        }
+        
+        # Also extract any product information if available
+        product_url = data.get('url')
+        product_brand = data.get('brand')
+        product_name = data.get('name')
+        
+        if product_url or product_brand or product_name:
+            result_data['url'] = product_url
+            result_data['brand'] = product_brand
+            result_data['name'] = product_name
+          # Store in MongoDB - required for production
+        client = get_mongo_client()
+        if client:
+            try:
+                db = client[config.MONGO_DB_NAME]
+                collection = db[config.MONGO_COLLECTION_NAME]
+                # Create identifier based on available data
+                identifier = {}
+                url = result_data.get('url')
+                brand = result_data.get('brand')
+                name = result_data.get('name')
+                
+                if url:
+                    identifier['url'] = url
+                elif brand and name:
+                    identifier['brand'] = brand
+                    identifier['name'] = name
+                else:
+                    # If no product identifiers, use request ID or timestamp
+                    identifier['request_id'] = str(datetime.datetime.utcnow().timestamp())
+                
+                # Store in MongoDB
+                update_result = collection.update_one(
+                    identifier,
+                    {'$set': result_data},
+                    upsert=True
+                )
+                logger.info(f"Rating data {'updated' if update_result.matched_count else 'inserted'} in MongoDB using identifier: {identifier}")
+                
+                # Try to export to unified product collection if relevant
+                if product_url or product_brand or product_name:
+                    try:
+                        product_info = {
+                            'brand': product_brand,
+                            'name': product_name,
+                            'url': product_url
+                        }
+                        sustainability_data = {
+                            'score': final_score,
+                            'rating': rating
+                        }
+                        export_product_to_mongo(product_info, sustainability_data)
+                        logger.info(f"Product also exported to unified collection: {product_name or product_url}")
+                    except Exception as e:
+                        logger.error(f"Export to unified collection failed: {e}")
+                
+            except Exception as e:
+                logger.error(f"MongoDB operation failed: {e}")
+                return jsonify({
+                    'success': False, 
+                    'error': f'Database storage failed: {str(e)}',
+                    'data': result_data  # Still return data even if storage failed
+                }), 500
+        else:
+            logger.error("MongoDB client not available - data cannot be stored")
+            return jsonify({
+                'success': False, 
+                'error': 'Database connection required but not available',
+                'data': result_data  # Still return data even without DB
+            }), 503
         
         return jsonify({
             'success': True,
-            'data': {
-                'score': final_score,
-                'rating': rating,
-                'factors': factors,
-                'weights': weights,
-                'advice': generate_sustainability_advice(factors)
-            }
+            'data': result_data
         })
     
     except Exception as e:
