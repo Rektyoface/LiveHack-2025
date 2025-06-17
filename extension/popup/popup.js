@@ -38,8 +38,10 @@ document.addEventListener('DOMContentLoaded', function() {
   function setTheme(isDarkMode) {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }
-
-  chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+  // Show loading state initially - no default values
+  showLoadingState();
+  
+  chrome.tabs.query({active: true, currentWindow: true}, async function(tabs) {
     if (tabs.length === 0) {
       showNoProductMessage();
       return;
@@ -48,24 +50,53 @@ document.addEventListener('DOMContentLoaded', function() {
     const url = new URL(currentTab.url);
     websiteBadge.textContent = url.hostname;
     const isShopee = currentTab.url.includes('shopee.sg') || currentTab.url.includes('shopee.com');
+    
     if (!isShopee) {
       showNoProductMessage("Visit Shopee to see sustainability ratings");
       return;
     }
+    
+    // First, try to get cached data for this specific URL
+    const cacheKey = currentTab.url;
+    try {
+      const cachedData = await getCachedData(cacheKey);
+      if (cachedData && isDataFresh(cachedData)) {
+        console.log("popup.js: Using cached data for", cacheKey);
+        handleSustainabilityData({ success: true, data: cachedData.data });
+        return;
+      }
+    } catch (error) {
+      console.log("popup.js: No cached data or error reading cache:", error);
+    }
+    
+    // If no cached data or data is stale, fetch from backend
+    console.log("popup.js: Fetching fresh data from backend...");
     chrome.tabs.sendMessage(currentTab.id, { action: "getProductInfo" }, function(response) {
       if (chrome.runtime.lastError || !response) {
         chrome.runtime.sendMessage({ 
           action: "checkCurrentPage", 
           url: currentTab.url,
           title: currentTab.title
-        }, handleSustainabilityData);
+        }, (backendResponse) => {
+          if (backendResponse && backendResponse.success) {
+            // Cache the response for future use
+            cacheData(cacheKey, backendResponse.data);
+          }
+          handleSustainabilityData(backendResponse);
+        });
         return;
       }
       if (response.productInfo) {
         chrome.runtime.sendMessage({
           action: "checkSustainability",
           productInfo: response.productInfo
-        }, handleSustainabilityData);
+        }, (backendResponse) => {
+          if (backendResponse && backendResponse.success) {
+            // Cache the response for future use
+            cacheData(cacheKey, backendResponse.data);
+          }
+          handleSustainabilityData(backendResponse);
+        });
       } else {
         showNoProductMessage("Couldn't identify product information");
       }
@@ -125,24 +156,27 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log("popup.js: Backend score type:", typeof data.score);
 
     productInfoElement.classList.remove('hidden');
-    
-    // IMPORTANT: Use the backend score directly - no frontend calculation
+      // CRITICAL: Use the backend score directly - no frontend calculation or defaults
     const backendScore = data.score;
     let displayScore;
     
+    // Only show score if we have a valid number from backend
     if (typeof backendScore === 'number' && !isNaN(backendScore)) {
-      displayScore = Math.round(backendScore); // Round to nearest integer
+      displayScore = Math.round(backendScore);
       console.log("popup.js: Using backend score:", displayScore);
     } else {
-      displayScore = undefined;
-      console.log("popup.js: Backend score not available, showing Unknown");
+      console.warn("popup.js: Backend score not valid:", backendScore);
+      // Don't show a default - show that we're still waiting for data
+      showNoProductMessage("Score not available. Backend may still be processing.");
+      return;
     }
-      // Update the main score display IMMEDIATELY with backend score
+
+    // Update the main score display with backend score only
     const scoreColor = getScoreColor(displayScore);
     scoreValueElement.style.color = '#FFF';
     scoreValueElement.parentElement.style.backgroundColor = scoreColor;
     brandNameElement.textContent = data.brand_name || data.brand || "Unknown Brand";
-    scoreValueElement.textContent = displayScore !== undefined ? displayScore : "Unknown";
+    scoreValueElement.textContent = displayScore;
 
     console.log("popup.js: Updated main score display with:", displayScore);
 
@@ -310,4 +344,80 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Learn More button - remove the incorrect details navigation
   // The "Show Details" button handles navigation to details page
+
+  // Caching functions for persistent data storage
+  async function getCachedData(cacheKey) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get([`cache_${cacheKey}`], (result) => {
+        const cacheData = result[`cache_${cacheKey}`];
+        resolve(cacheData);
+      });
+    });
+  }
+  
+  async function cacheData(cacheKey, data) {
+    const cacheEntry = {
+      data: data,
+      timestamp: Date.now(),
+      url: cacheKey
+    };
+    
+    chrome.storage.local.set({
+      [`cache_${cacheKey}`]: cacheEntry
+    }, () => {
+      console.log("popup.js: Cached data for", cacheKey);
+    });
+  }
+  
+  function isDataFresh(cachedEntry, maxAgeMinutes = 30) {
+    if (!cachedEntry || !cachedEntry.timestamp) return false;
+    const age = Date.now() - cachedEntry.timestamp;
+    const maxAge = maxAgeMinutes * 60 * 1000; // Convert to milliseconds
+    return age < maxAge;
+  }
+  
+  // Clean up old cached data periodically
+  async function cleanupOldCache() {
+    try {
+      const result = await chrome.storage.local.get();
+      const keysToRemove = [];
+      const maxAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+      
+      for (const [key, value] of Object.entries(result)) {
+        if (key.startsWith('cache_') && value.timestamp) {
+          const age = Date.now() - value.timestamp;
+          if (age > maxAge) {
+            keysToRemove.push(key);
+          }
+        }
+      }
+      
+      if (keysToRemove.length > 0) {
+        chrome.storage.local.remove(keysToRemove);
+        console.log(`popup.js: Cleaned up ${keysToRemove.length} old cache entries`);
+      }
+    } catch (error) {
+      console.error("popup.js: Error cleaning up cache:", error);
+    }
+  }
+  
+  // Run cleanup when popup opens
+  cleanupOldCache();
+
+  function showLoadingState() {
+    loadingElement.classList.remove('hidden');
+    noProductElement.classList.add('hidden');
+    productInfoElement.classList.add('hidden');
+    
+    // Set loading indicators
+    if (scoreValueElement) {
+      scoreValueElement.textContent = '...';
+      scoreValueElement.style.color = '#999';
+    }
+    if (brandNameElement) {
+      brandNameElement.textContent = 'Loading...';
+    }
+    
+    console.log("popup.js: Showing loading state");
+  }
 });

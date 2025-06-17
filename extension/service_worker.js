@@ -4,8 +4,21 @@
 console.log("EcoShop Service Worker starting up...");
 console.log("EcoShop Service Worker ACTIVE: [main service_worker.js] - v2025-06-17");
 
-// In-memory cache for faster lookups
+// In-memory cache for faster lookups - URL-based caching
 let sustainabilityCache = {};
+
+// Cache cleanup interval (every 30 minutes)
+setInterval(() => {
+  const maxAge = 30 * 60 * 1000; // 30 minutes
+  const now = Date.now();
+  
+  for (const [key, data] of Object.entries(sustainabilityCache)) {
+    if (data.timestamp && (now - data.timestamp) > maxAge) {
+      delete sustainabilityCache[key];
+      console.log("Service worker: Cleaned up expired cache entry for", key);
+    }
+  }
+}, 30 * 60 * 1000); // Run every 30 minutes
 
 // Store product data history for reference
 let scrapedProductsHistory = [];
@@ -363,51 +376,69 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
       scrapedProductsHistory.unshift(productWithTimestamp);
       if (scrapedProductsHistory.length > 100) scrapedProductsHistory.pop();
     }
-    
-    // Check cache
-    const cacheKey = (productInfo.brand || productInfo.name)?.toLowerCase();
+      // Check cache first - use URL-based caching for better accuracy
+    const cacheKey = productInfo.url || (productInfo.brand || productInfo.name)?.toLowerCase();
     if (cacheKey && sustainabilityCache[cacheKey]) {
-      const data = sustainabilityCache[cacheKey];
-      if (sender?.tab?.id) {
-        updateBadgeForTab(sender.tab.id, data.score);
-        tabDataCache[sender.tab.id] = data;
+      const cachedData = sustainabilityCache[cacheKey];
+      // Check if cached data is fresh (within 30 minutes)
+      const cacheAge = Date.now() - (cachedData.timestamp || 0);
+      const maxCacheAge = 30 * 60 * 1000; // 30 minutes in milliseconds
+      
+      if (cacheAge < maxCacheAge) {
+        console.log("Service worker: Using cached data for", cacheKey);
+        if (sender?.tab?.id) {
+          updateBadgeForTab(sender.tab.id, cachedData.score);
+          tabDataCache[sender.tab.id] = cachedData;
+        }
+        sendResponse({ success: true, data: cachedData });
+        return;
+      } else {
+        console.log("Service worker: Cached data expired, fetching fresh data");
+        delete sustainabilityCache[cacheKey];
       }
-      sendResponse({ success: true, data });
-      return;
-    }    // 1. Try backend API
+    }
+
+    // 1. Try backend API - ALWAYS wait for complete response
     try {
+      console.log("Service worker: Fetching from backend API...");
       const apiData = await fetchFromApi(transformed, productInfo.brand);
-      if (apiData) {
-        console.log("=== SERVICE WORKER: SENDING TO POPUP ===");
+      if (apiData && typeof apiData.score === 'number' && !isNaN(apiData.score)) {        console.log("=== SERVICE WORKER: BACKEND API SUCCESS ===");
         console.log("Data being sent to popup:", JSON.stringify(apiData, null, 2));
         console.log("Specifically, score being sent:", apiData.score);
         
-        if (cacheKey) sustainabilityCache[cacheKey] = apiData;
+        // Add timestamp for caching
+        apiData.timestamp = Date.now();
+        
+        // Cache the valid response
+        if (cacheKey) {
+          sustainabilityCache[cacheKey] = apiData;
+          console.log("Service worker: Cached data for", cacheKey);
+        }
+        
         if (sender?.tab?.id) {
           updateBadgeForTab(sender.tab.id, apiData.score);
           tabDataCache[sender.tab.id] = apiData;
           sendToastToTab(sender.tab.id, `EcoShop: Analysis complete! Score: ${apiData.score}`);
         }
         
-        // Ensure we're sending a proper response structure
+        // Send the response with valid data
         const responseToSend = { success: true, data: apiData };
-        console.log("Service worker sending response:", responseToSend);
+        console.log("Service worker sending valid response:", responseToSend);
         sendResponse(responseToSend);
         return;
-      }
-    } catch (apiError) {
-      console.warn("API call failed, falling back to test score:", apiError);
+      } else {
+        console.warn("Service worker: Backend API returned invalid data - score missing or invalid");
+        throw new Error("Backend returned invalid score data");
+      }    } catch (apiError) {
+      console.error("Service worker: Backend API failed:", apiError);
+      // Don't fallback to test data - let user know backend is needed
+      sendResponse({ 
+        success: false, 
+        error: "Backend service unavailable. Please check connection and try again.",
+        details: apiError.message 
+      });
+      return;
     }
-    
-    // 2. Fallback: local test score
-    const testData = generateTestScore(transformed);
-    if (cacheKey) sustainabilityCache[cacheKey] = testData;
-    if (sender?.tab?.id) {
-      updateBadgeForTab(sender.tab.id, testData.score);
-      tabDataCache[sender.tab.id] = testData;
-      sendToastToTab(sender.tab.id, `EcoShop: Test analysis complete! Score: ${testData.score}`);
-    }
-    sendResponse({ success: true, data: testData, status: 'fallback' });
   } catch (error) {
     console.error("Error in handleSustainabilityCheck:", error);
     sendResponse({ success: false, error: error.message });

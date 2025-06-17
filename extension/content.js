@@ -776,7 +776,7 @@
         let summaryScore = (typeof fieldScore === 'number') ? fieldScore * userWeights[key] / totalWeight : 0;
         weightedSum += summaryScore;
       });
-      displayScore = weightedSum > 0 ? Math.ceil(weightedSum * 10) : undefined;
+      displayScore = weightedSum > 0 ? Math.round(weightedSum * 10) : undefined;
     }
     // Always update the browser action badge, regardless of showBadge setting
     chrome.runtime.sendMessage({ action: "setBadgeScoreFromContent", displayScore });
