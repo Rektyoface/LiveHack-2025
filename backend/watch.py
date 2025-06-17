@@ -36,10 +36,12 @@ def stream_task_changes(
         SSE-formatted strings for client consumption
     """
     try:
+        logger.info(f"Starting stream_task_changes for task_id={task_id}")
         # Convert string ID to ObjectId
         try:
             object_id = ObjectId(task_id)
         except Exception as e:
+            logger.error(f"Invalid task ID: {task_id}")
             yield f"event: error\ndata: {json.dumps({'error': 'Invalid task ID'})}\n\n"
             return
         
@@ -49,15 +51,18 @@ def stream_task_changes(
         # Check if task exists
         task = collection.find_one({"_id": object_id})
         if not task:
+            logger.warning(f"Task not found: {task_id}")
             yield f"event: error\ndata: {json.dumps({'error': 'Task not found'})}\n\n"
             return
         
         # If task is already done, send immediate completion
         if task.get('status') in ['done', 'error']:
+            logger.info(f"Task {task_id} already completed with status: {task.get('status')}")
             yield f"event: done\ndata: {json.dumps(task, default=str)}\n\n"
             return
         
         # Send initial state
+        logger.info(f"Sending initial state for task {task_id}")
         yield f"event: status\ndata: {json.dumps(task, default=str)}\n\n"
         
         # Create change stream pipeline to watch this specific task

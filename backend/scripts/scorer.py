@@ -21,6 +21,11 @@ RATING_SCORES = {
     'Unknown': 0.0, # Treat 'Unknown' as a neutral 0.0 score.
 }
 
+import json
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('scorer')
 
 # ==============================================================================
 # Part 2: Scorer Functions
@@ -44,11 +49,13 @@ def generate_sustainability_breakdown(analysis_json: dict) -> dict:
     # Iterate through our three main categories
     for category, details in sustainability_analysis.items():
         rating = details.get('rating', 'Unknown')
+        logger.debug(f"Processing category: {category}, rating: {rating}")
         breakdown[category] = {
             "value": rating,  # The qualitative rating (e.g., "Good")
             "score": RATING_SCORES.get(rating, 0.0), # The quantitative score
             "analysis": details.get('analysis', 'No analysis provided.')
         }
+    logger.info(f"Generated breakdown: {json.dumps(breakdown, indent=2)}")
     return breakdown
 
 

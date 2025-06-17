@@ -42,13 +42,15 @@ def log_extension_payload():
         if request.is_json:
             try:
                 payload_to_log = json.dumps(request.get_json(silent=True) or {}, separators=(',', ':'))
-            except Exception:
+            except Exception as e:
                 payload_to_log = "[Could not parse JSON payload]"
+                logger.error(f"Error parsing JSON payload: {e}")
         else:
             try:
                 payload_to_log = request.get_data(as_text=True).strip()
-            except Exception:
+            except Exception as e:
                 payload_to_log = "[Could not decode text payload]"
+                logger.error(f"Error decoding text payload: {e}")
         logger.info(f'EXT_PAYLOAD {request.path} ({request.content_type}): {payload_to_log[:1000]}...') # Log more of the payload
 
 @app.route('/extract_and_rate', methods=['POST'])

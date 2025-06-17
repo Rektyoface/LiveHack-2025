@@ -5,21 +5,28 @@ import google.generativeai as genai
 from google.generativeai.types import Tool, FunctionDeclaration
 import sys
 import os
+import logging
+
+# --- Logging Setup ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('analyzer')
 
 # --- Path Correction and Config Import ---
 try:
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sys.path.insert(0, project_root)
     from config import GOOGLE_API_KEY, APP_CATEGORIES
+    logger.info("Successfully imported config variables.")
 except ImportError:
-    print("CRITICAL: Could not import from config.py.")
+    logger.critical("CRITICAL: Could not import from config.py.")
     sys.exit(1)
 
 # --- Configure Google AI Client ---
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
+    logger.info("Google AI client configured.")
 except Exception as e:
-    print(f"CRITICAL: Failed to configure Google AI. Error: {e}")
+    logger.critical(f"CRITICAL: Failed to configure Google AI. Error: {e}")
     sys.exit(1)
 
 # --- Define the Tools ---

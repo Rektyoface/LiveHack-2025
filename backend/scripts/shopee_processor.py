@@ -80,22 +80,16 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
     logger.info(f"  source_site: '{parsed_info['source_site']}'")
     logger.info(f"  listing_id: '{parsed_info['listing_id']}'")
     
-    try:
-        existing_product = products_collection.find_one({
-            "source_site": parsed_info['source_site'],
-            "listing_id": parsed_info['listing_id']
-        })
+    existing_product = products_collection.find_one({
+        "source_site": parsed_info['source_site'],
+        "listing_id": parsed_info['listing_id'],
+    })
+    if existing_product:
+        logger.info(f"CACHE HIT: Found existing product with _id: {existing_product.get('_id')}")
+        logger.info(f"Existing product data: {json.dumps({k: v for k, v in existing_product.items() if k != '_id'}, indent=2, default=str)}")
+    else:
+        logger.info("CACHE MISS: No existing product found. Running LLM analysis...")
         
-        if existing_product:
-            logger.info(f"CACHE HIT: Found existing product with _id: {existing_product.get('_id')}")
-            logger.info(f"Existing product data: {json.dumps({k: v for k, v in existing_product.items() if k != '_id'}, indent=2, default=str)}")
-        else:
-            logger.info("CACHE MISS: No existing product found")
-            
-    except Exception as e:
-        logger.error(f"FAILED: Database query error: {e}")
-        return None
-
     # --- Step 3: Handle Cache Hit (The Fast Path) ---
     if existing_product:
         logger.info("=== STEP 3: CACHE HIT - FAST PATH ===")
