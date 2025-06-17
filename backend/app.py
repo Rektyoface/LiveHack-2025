@@ -154,10 +154,13 @@ def extract_and_rate_product():
         final_response_data = {
             'url': product_url or processed_result.get('url'), # Prioritize initially parsed URL
             'brand': processed_result.get('brand', 'Unknown'),
+            'brand_name': processed_result.get('brand', 'Unknown'),  # For consistency with frontend
             'name': processed_result.get('product_name', processed_result.get('name', 'Unknown')),
             'category': processed_result.get('category', 'Unknown'),
             'score': processed_result.get('sustainability_score', 0),
             'breakdown': processed_result.get('sustainability_breakdown', {}),
+            'sustainability_breakdown': processed_result.get('sustainability_breakdown', {}),  # For consistency
+            'recommendations': processed_result.get('recommendations', []),
             'raw_llm_response': processed_result.get('raw_llm_response', None), # For debugging LLM
             'processing_time_ms': processing_time_ms,
             'timestamp': datetime.now(timezone.utc).isoformat() + 'Z'
