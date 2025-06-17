@@ -155,6 +155,7 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
     product_document = {
         "listing_id": parsed_info['listing_id'],
         "source_site": parsed_info['source_site'],
+        "source_url": url,
         "product_name": analysis_json.get('product_name', 'N/A'),
         "brand": analysis_json.get('brand', 'N/A'),
         "category": analysis_json.get('category', 'Unknown'),
