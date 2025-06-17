@@ -1,6 +1,6 @@
 import json
 from groq import Groq
-import config
+import backend.scripts.config as config
 
 client = Groq(
     api_key= config.API_KEY

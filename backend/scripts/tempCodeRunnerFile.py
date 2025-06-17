@@ -1,11 +1,11 @@
 # db.py
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
-import certifi
-import ssl
+
+
 # Import configuration variables from config.py
 try:
-    from config import MONGO_URI, MONGO_DB, MONGO_PRODUCTS_COLLECTION
+    from backend.scripts.config import MONGO_URI, MONGO_DB, MONGO_PRODUCTS_COLLECTION
 except ImportError:
     print("Error: config.py not found or missing required variables.")
     # Set to None so the application can gracefully handle the missing config
@@ -25,7 +25,7 @@ def connect_to_db():
     if MONGO_URI and MONGO_DB and MONGO_PRODUCTS_COLLECTION:
         try:
             # Create a new client and connect to the server
-            client = MongoClient(MONGO_URI, tls=True, tlsCAFile=certifi.where())
+            client = MongoClient(MONGO_URI)
             
             # Send a ping to confirm a successful connection
             client.admin.command('ping')
