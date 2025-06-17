@@ -2,6 +2,13 @@
 # Part 1: Configuration - Default Weights and Scoring Maps
 # ==============================================================================
 
+import logging
+import json
+
+# Configure logging for scorer
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('scorer')
+
 # This dictionary represents the standard weights if the user provides none.
 # The values represent the importance of each category on a relative scale.
 DEFAULT_WEIGHTS = {
@@ -47,30 +54,43 @@ def generate_sustainability_breakdown(analysis_json: dict) -> dict:
     Returns:
         A dictionary containing the detailed sustainability breakdown.
     """
+    logger.info("=== SCORER: GENERATING SUSTAINABILITY BREAKDOWN ===")
+    logger.info(f"Input analysis_json: {json.dumps(analysis_json, indent=2)}")
+    
     breakdown = {}
     
     # --- Materials Breakdown ---
+    logger.info("Processing materials breakdown...")
     material_type = analysis_json.get('materials', {}).get('type', 'Unknown')
+    material_score = MATERIAL_SCORES.get(material_type, 0.0)
     breakdown['materials'] = {
         "value": material_type,
-        "score": MATERIAL_SCORES.get(material_type, 0.0)
+        "score": material_score
     }
+    logger.info(f"Materials: {material_type} -> score: {material_score}")
     
     # --- Durability Breakdown ---
+    logger.info("Processing durability breakdown...")
     durability_assessment = analysis_json.get('durability_and_longevity', {}).get('assessment', 'Unknown')
+    durability_score = DURABILITY_SCORES.get(durability_assessment, 0.0)
     breakdown['durability'] = {
         "value": durability_assessment,
-        "score": DURABILITY_SCORES.get(durability_assessment, 0.0)
+        "score": durability_score
     }
+    logger.info(f"Durability: {durability_assessment} -> score: {durability_score}")
     
     # --- Logistics Breakdown ---
+    logger.info("Processing logistics breakdown...")
     distance_implication = analysis_json.get('logistics_and_shipping', {}).get('shipping_distance_implication', 'Unknown')
+    logistics_score = LOGISTICS_SCORES.get(distance_implication, 0.0)
     breakdown['logistics'] = {
         "value": distance_implication,
-        "score": LOGISTICS_SCORES.get(distance_implication, 0.0)
+        "score": logistics_score
     }
+    logger.info(f"Logistics: {distance_implication} -> score: {logistics_score}")
 
     # --- Packaging Breakdown ---
+    logger.info("Processing packaging breakdown...")
     packaging_desc = analysis_json.get('packaging', {}).get('description', 'Not Mentioned')
     packaging_value = 'Not Mentioned'
     if 'plastic-free' in packaging_desc.lower() or 'eco-friendly' in packaging_desc.lower():
@@ -108,25 +128,44 @@ def calculate_weighted_score(sustainability_breakdown: dict, user_weights: dict 
     Returns:
         The final sustainability score, an integer between 0 and 100.
     """
+    logger.info("=== SCORER: CALCULATING WEIGHTED SCORE ===")
+    logger.info(f"Sustainability breakdown: {json.dumps(sustainability_breakdown, indent=2)}")
+    logger.info(f"User weights: {user_weights}")
+    
     # Use user-provided weights, or fall back to the defaults
     weights = user_weights or DEFAULT_WEIGHTS
+    logger.info(f"Using weights: {weights}")
     
     total_weighted_score = 0
+    total_weight = 0
+    
+    logger.info("Processing each category...")
     # Iterate through the breakdown object to calculate the total score
     for category, breakdown_details in sustainability_breakdown.items():
         # Get the normalized score (-1.0 to 1.0) for the category
         score = breakdown_details.get('score', 0.0)
         # Get the user's weight for that category
         weight = weights.get(category, 0)
-        total_weighted_score += score * weight
-
-    # Normalize the final score to be on a 0-100 scale
-    total_weights = sum(weights.values())
-    if total_weights == 0:
-        return 50 # Return a neutral 50 if weights are all zero
-
-    # The formula maps the raw score range [ -total_weights, +total_weights ] to [ 0, 100 ]
-    normalized_score = 50 + 50 * (total_weighted_score / total_weights)
+        
+        weighted_contribution = score * weight
+        total_weighted_score += weighted_contribution
+        total_weight += weight
+        
+        logger.info(f"  {category}: score={score}, weight={weight}, contribution={weighted_contribution}")
     
-    # Clamp the result to ensure it's always within the 0-100 range
-    return max(0, min(100, int(normalized_score)))
+    logger.info(f"Total weighted score: {total_weighted_score}")
+    logger.info(f"Total weight: {total_weight}")
+    
+    # Avoid division by zero
+    if total_weight == 0:
+        logger.warning("Total weight is 0, returning score of 50")
+        return 50
+      # Calculate the average weighted score
+    average_weighted_score = total_weighted_score / total_weight
+    logger.info(f"Average weighted score: {average_weighted_score}")
+    
+    # Convert from -1.0 to 1.0 scale to 0 to 100 scale
+    final_score = int((average_weighted_score + 1) * 50)
+    logger.info(f"Final score (0-100): {final_score}")
+    
+    return final_score

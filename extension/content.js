@@ -45,24 +45,25 @@
   
   // Check if current page is a product page by looking for product sections
   function isProductPage() {
-    // Look for indicators that this is a product page
+    // Define indicators, from most reliable to less reliable
     const productIndicators = [
-      // Text-based indicators
-      () => document.body.textContent.includes('Product Specifications'),
-      () => document.body.textContent.includes('Product Details'),
-      () => document.body.textContent.includes('Product Description'),
-      
-      // Structure-based indicators
-      () => document.querySelector('.product-specs, .specifications, .product-specifications'),
-      () => document.querySelector('.product-details, .details, .product-info'),
-      () => document.querySelector('.description, .product-description'),
-      
-      // Shopee-specific indicators
-      () => document.querySelector('.qPNIqx'), // Brand selector
+      // Shopee-specific selectors (high confidence)
       () => document.querySelector('.YPqix5'), // Product name selector
-      () => document.body.textContent.includes('Category') && 
-            document.body.textContent.includes('Brand') && 
-            document.body.textContent.includes('Stock')
+      () => document.querySelector('.qPNIqx'), // Brand selector
+      // Robust text combination (high confidence)
+      () => {
+        const bodyText = document.body.textContent;
+        return bodyText.includes('Category') && bodyText.includes('Brand') && bodyText.includes('Stock');
+      },
+      // Common product page sections/text (medium confidence)
+      // Check for text first as querySelector can be slow if run many times
+      () => document.body.textContent.includes('Product Specifications'),
+      () => document.querySelector('.product-specs, .specifications, .product-specifications')
+      // Removed overly generic indicators like:
+      // - textContent.includes('Product Details')
+      // - textContent.includes('Product Description')
+      // - querySelector('.product-details, .details, .product-info')
+      // - querySelector('.description, .product-description')
     ];
     
     // Check if any indicator matches

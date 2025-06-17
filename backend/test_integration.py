@@ -83,7 +83,7 @@ def test_config():
     """Test configuration loading."""
     print("=== Testing Configuration ===")
     try:
-        import backend.scripts.config as config
+        from scripts import config
         print(f"MONGO_DB_NAME: {config.MONGO_DB_NAME}")
         print(f"MONGO_COLLECTION_NAME: {config.MONGO_COLLECTION_NAME}")
         print(f"APP_CATEGORIES count: {len(config.APP_CATEGORIES)}")

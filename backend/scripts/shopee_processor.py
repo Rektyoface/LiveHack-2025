@@ -10,6 +10,13 @@
 
 import sys
 import os
+import json
+import logging
+
+# Configure logging for shopee_processor
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('shopee_processor')
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from scripts.db import products_collection
@@ -47,33 +54,59 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         A dictionary representing the final product document, including the
         personalized score, or None if the process fails at any step.
     """
-    # --- Guard Clause: Ensure database is connected ---
+    
+    logger.info("=== SHOPEE_PROCESSOR: STARTING PROCESSING ===")
+    logger.info(f"Input URL: {url}")
+    logger.info(f"Raw text length: {len(raw_text) if raw_text else 0}")
+    logger.info(f"User weights provided: {user_weights is not None}")
+    logger.info(f"Products collection available: {products_collection is not None}")
+      # --- Guard Clause: Ensure database is connected ---
     if products_collection is None:
-        print("Error: Database is not connected. Cannot process URL.")
+        logger.error("CRITICAL: Database is not connected. Cannot process URL.")
         return None
 
     # --- Step 2a: Parse URL to get unique identifiers ---
+    logger.info("=== STEP 2A: PARSING URL ===")
     parsed_info = parse_shopee_url(url)
     if not parsed_info:
-        print(f"Error: Invalid or unparsable Shopee URL: {url}")
+        logger.error(f"FAILED: Invalid or unparsable Shopee URL: {url}")
         return None
+    
+    logger.info(f"SUCCESS: Parsed URL -> {json.dumps(parsed_info, indent=2)}")
 
     # --- Step 2b: Check the database (cache) for an existing product ---
-    print(f"\nChecking cache for product -> site: '{parsed_info['source_site']}', listing_id: '{parsed_info['listing_id']}'")
-    existing_product = products_collection.find_one({
-        "source_site": parsed_info['source_site'],
-        "listing_id": parsed_info['listing_id']
-    })
+    logger.info("=== STEP 2B: CHECKING DATABASE CACHE ===")
+    logger.info(f"Looking for existing product with:")
+    logger.info(f"  source_site: '{parsed_info['source_site']}'")
+    logger.info(f"  listing_id: '{parsed_info['listing_id']}'")
+    
+    try:
+        existing_product = products_collection.find_one({
+            "source_site": parsed_info['source_site'],
+            "listing_id": parsed_info['listing_id']
+        })
+        
+        if existing_product:
+            logger.info(f"CACHE HIT: Found existing product with _id: {existing_product.get('_id')}")
+            logger.info(f"Existing product data: {json.dumps({k: v for k, v in existing_product.items() if k != '_id'}, indent=2, default=str)}")
+        else:
+            logger.info("CACHE MISS: No existing product found")
+            
+    except Exception as e:
+        logger.error(f"FAILED: Database query error: {e}")
+        return None
 
     # --- Step 3: Handle Cache Hit (The Fast Path) ---
     if existing_product:
-        print("✅ Cache HIT! Recalculating score with user weights.")
+        logger.info("=== STEP 3: CACHE HIT - FAST PATH ===")
         
         # Use the stored breakdown to perform a very fast recalculation
+        logger.info("Recalculating score with user weights...")
         personalized_score = calculate_weighted_score(
             existing_product['sustainability_breakdown'], 
             user_weights
         )
+        logger.info(f"Personalized score calculated: {personalized_score}")
         
         # Update the score in the document we are about to return to the user
         existing_product['sustainability_score'] = personalized_score
@@ -83,24 +116,38 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         if 'default_sustainability_score' in existing_product:
             del existing_product['default_sustainability_score']
         
+        logger.info("SUCCESS: Process completed (CACHE HIT)")
+        logger.info(f"Returning product: {json.dumps(existing_product, indent=2, default=str)}")
         return existing_product
 
     # --- Step 4: Handle Cache Miss (The Full Pipeline) ---
-    print("❌ Cache MISS. Starting full analysis pipeline...")
+    logger.info("=== STEP 4: CACHE MISS - FULL ANALYSIS PIPELINE ===")
 
     # 4a. Call the LLM to analyze the raw text
+    logger.info("=== STEP 4A: CALLING LLM ANALYZER ===")
+    logger.info(f"Sending raw text to analyzer (length: {len(raw_text)})")
+    logger.info(f"Raw text preview (first 500 chars): {raw_text[:500]}...")
+    
     analysis_json = get_full_product_analysis(raw_text)
     if not analysis_json:
-        print("Processing failed: LLM analysis returned no data.")
+        logger.error("FAILED: LLM analysis returned no data")
         return None
+    
+    logger.info("SUCCESS: LLM analysis completed")
+    logger.info(f"Analysis result: {json.dumps(analysis_json, indent=2)}")
 
     # 4b. Convert the LLM's text analysis into our rich breakdown object
+    logger.info("=== STEP 4B: GENERATING SUSTAINABILITY BREAKDOWN ===")
     sustainability_breakdown = generate_sustainability_breakdown(analysis_json)
+    logger.info(f"Sustainability breakdown: {json.dumps(sustainability_breakdown, indent=2)}")
 
     # 4c. Calculate the default score that will be stored permanently in the database
+    logger.info("=== STEP 4C: CALCULATING DEFAULT SCORE ===")
     default_score_for_db = calculate_weighted_score(sustainability_breakdown, DEFAULT_WEIGHTS)
+    logger.info(f"Default score calculated: {default_score_for_db}")
     
     # 4d. Assemble the new, lean document to be inserted into MongoDB
+    logger.info("=== STEP 4D: ASSEMBLING DOCUMENT FOR DATABASE ===")
     product_document = {
         "listing_id": parsed_info['listing_id'],
         "source_site": parsed_info['source_site'],
@@ -110,10 +157,15 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         "sustainability_breakdown": sustainability_breakdown,
         "default_sustainability_score": default_score_for_db,
     }
+    logger.info(f"Document to insert: {json.dumps(product_document, indent=2)}")
 
     # 4e. Save the new document to the database
+    logger.info("=== STEP 4E: SAVING TO DATABASE ===")
     try:
+        logger.info("Attempting to insert document into MongoDB...")
         result = products_collection.insert_one(product_document)
+        logger.info(f"SUCCESS: Document inserted with _id: {result.inserted_id}")
+        
         # Create a new dictionary for the response to the user.
         # This avoids modifying the original document we want to test.
         response_document = product_document.copy()
@@ -122,14 +174,19 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         response_document['_id'] = result.inserted_id
         
         # Calculate the personalized score for the user
+        logger.info("Calculating personalized score for response...")
         personalized_score = calculate_weighted_score(sustainability_breakdown, user_weights)
         response_document['sustainability_score'] = personalized_score
+        logger.info(f"Personalized score: {personalized_score}")
         
         # Clean up the response document by removing the default score
         del response_document['default_sustainability_score']
         
+        logger.info("SUCCESS: Process completed (CACHE MISS)")
+        logger.info(f"Returning product: {json.dumps(response_document, indent=2, default=str)}")
         return response_document
     
     except Exception as e:
-        print(f"Error: Could not insert document into MongoDB. {e}")
+        logger.error(f"FAILED: Could not insert document into MongoDB: {e}")
+        logger.error(f"Document that failed to insert: {json.dumps(product_document, indent=2)}")
         return None

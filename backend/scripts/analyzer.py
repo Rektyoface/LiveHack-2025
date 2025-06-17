@@ -3,7 +3,12 @@ import json
 from groq import Groq
 import sys
 import os
+import logging
 import config
+
+# Configure logging for analyzer
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('analyzer')
 
 # If config.py is in the same directory (scripts) as analyzer.py:
 from config import GROQ_API_KEY, APP_CATEGORIES
@@ -16,8 +21,17 @@ from config import GROQ_API_KEY, APP_CATEGORIES
 client = Groq(api_key=GROQ_API_KEY)
 
 def get_full_product_analysis(raw_text: str) -> dict | None:
+    logger.info("=== ANALYZER: STARTING LLM ANALYSIS ===")
+    logger.info(f"Input text length: {len(raw_text) if raw_text else 0}")
+    logger.info(f"GROQ API key configured: {bool(GROQ_API_KEY)}")
+    
+    if not raw_text or not raw_text.strip():
+        logger.error("FAILED: No raw text provided for analysis")
+        return None
+    
     # Convert the list of categories into a comma-separated string for the prompt
     category_list_str = ", ".join(f'"{cat}"' for cat in APP_CATEGORIES)
+    logger.info(f"Using categories: {category_list_str}")
     
     system_prompt = f"""
     You are a powerful data extraction engine. Your task is to parse a raw text dump from a product page and convert it into a structured JSON object.
@@ -61,6 +75,10 @@ def get_full_product_analysis(raw_text: str) -> dict | None:
       }}
     }}
     """
+    
+    logger.info("Sending request to Groq LLM...")
+    logger.info(f"Raw text preview (first 1000 chars): {raw_text[:1000]}...")
+    
     try:
         chat_completion = client.chat.completions.create(
             messages=[
@@ -71,11 +89,24 @@ def get_full_product_analysis(raw_text: str) -> dict | None:
             temperature=0.0, # Set to 0 for maximum fact-based adherence
             response_format={"type": "json_object"},
         )
-        return json.loads(chat_completion.choices[0].message.content)
+        
+        logger.info("SUCCESS: Received response from Groq LLM")
+        
+        # Parse the JSON response
+        response_content = chat_completion.choices[0].message.content
+        logger.info(f"Raw LLM response: {response_content}")
+        
+        parsed_response = json.loads(response_content)
+        logger.info(f"Parsed LLM response: {json.dumps(parsed_response, indent=2)}")
+        
+        return parsed_response
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"FAILED: Invalid JSON response from LLM: {e}")
+        logger.error(f"Raw response was: {chat_completion.choices[0].message.content if 'chat_completion' in locals() else 'No response received'}")
+        return None
+        
     except Exception as e:
-        print(f"An error occurred during LLM analysis: {e}")
-        # Return a structured error dictionary instead of None
-        return {
-            "error": "LLM analysis failed.",
-            "details": str(e)
-        }
+        logger.error(f"FAILED: An error occurred during LLM analysis: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
+        return None
