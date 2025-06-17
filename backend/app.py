@@ -22,7 +22,7 @@ from scripts.export_to_mongo import export_product_to_mongo
 
 # Import new modules
 from watch import stream_task_changes, create_task_document, update_task_status
-import config
+import backend.scripts.config as config
 
 # Load environment variables from .env file if present
 load_dotenv()

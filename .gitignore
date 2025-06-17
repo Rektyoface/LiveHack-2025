@@ -1,2 +1,4 @@
 backend/config.py
-backend/.env
+backend/scripts/config.py
+backend/__pycache__
+backend/scripts/__pycache__
