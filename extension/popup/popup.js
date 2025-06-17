@@ -72,7 +72,17 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
+  // Listen for refresh message to re-apply weights and update scoring
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'refreshEcoShopPopup') {
+      // Always reload the popup to fetch latest settings and recalculate
+      window.location.reload();
+    }
+  });
+
+  // Patch: store last data for refresh
   function handleSustainabilityData(response) {
+    window._lastEcoShopData = response;
     console.log("popup.js: Received response in handleSustainabilityData:", response); // Existing log
 
     loadingElement.classList.add('hidden');
@@ -108,7 +118,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Get user weights from settings (default to 5 if missing)
     chrome.storage.sync.get(['settings'], (settingsData) => {
       const userWeights = settingsData.settings || {};
-      // Map backend fields to user weights (default 5)
       const fieldWeightMap = {
         production_and_brand: userWeights.production_and_brand || 5,
         circularity_and_end_of_life: userWeights.circularity_and_end_of_life || 5,
@@ -122,15 +131,15 @@ document.addEventListener('DOMContentLoaded', function() {
         { key: 'circularity_and_end_of_life', label: 'Circularity And End Of Life' },
         { key: 'material_composition', label: 'Material Composition' }
       ];
+      let weightedSum = 0;
+      let totalWeight = 0;
       if (breakdown) {
         fieldOrder.forEach(field => {
           const metricData = breakdown[field.key] || {};
           let value = metricData.value || metricData.rating || "Unknown";
           let score = typeof metricData.score === 'number' ? metricData.score : undefined;
-          // Apply user weight scaling (score * weight/5), round up only for display
-          let userWeight = fieldWeightMap[field.key] || 5;
-          let weightedScore = (typeof score === 'number') ? Math.ceil(score * userWeight / 5) : undefined;
-          let displayFieldScore = (typeof weightedScore === 'number') ? Math.max(0, Math.min(10, weightedScore)) : undefined;
+          // Field ratings are fixed, not weighted
+          let displayFieldScore = (typeof score === 'number') ? Math.max(0, Math.min(10, score)) : undefined;
           if ((value === "Unknown" || !value) && (score === undefined || score === -1 || score === 0)) {
             value = "We could not find data";
           }
@@ -151,6 +160,11 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
           `;
           sustainabilityMetricsContainer.appendChild(metricElement);
+          // For summary score calculation, use the fixed field score, but apply user weights
+          let userWeight = fieldWeightMap[field.key] || 5;
+          let summaryScore = (value === "Unknown" && typeof score === 'number') ? 3 : (typeof score === 'number' ? score * userWeight / 5 : 0);
+          weightedSum += summaryScore;
+          totalWeight += 1;
         });
       } else {
         // Always show the 3 default fields with placeholder values
@@ -173,6 +187,15 @@ document.addEventListener('DOMContentLoaded', function() {
           sustainabilityMetricsContainer.appendChild(metricElement);
         });
       }
+      // Calculate the main summary score (0-100) using the weighted field scores, always round UP
+      let mainScore = totalWeight > 0 ? Math.ceil((weightedSum / totalWeight) * 10) : undefined;
+      let displayScore = mainScore;
+      // Update the badge to match the popup score
+      chrome.runtime.sendMessage({ action: "setBadgeScore", score: displayScore });
+      const scoreColor = getScoreColor(displayScore);
+      scoreValueElement.style.color = '#FFF';
+      scoreValueElement.parentElement.style.backgroundColor = scoreColor;
+      scoreValueElement.textContent = displayScore !== undefined ? displayScore : "Unknown";
 
       // Show Details button logic
       const showDetailsButton = document.getElementById('show-details');

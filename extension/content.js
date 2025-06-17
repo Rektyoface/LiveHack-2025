@@ -793,13 +793,46 @@
       transition: opacity 0.4s cubic-bezier(0.4,0,0.2,1), transform 0.4s cubic-bezier(0.4,0,0.2,1);
     `;
 
-    
+
+    // Calculate the weighted/averaged score and round up after division, matching popup logic
+    let displayScore = sustainabilityData.score;
+    if (sustainabilityData.sustainability_breakdown || sustainabilityData.breakdown) {
+      const breakdown = sustainabilityData.sustainability_breakdown || sustainabilityData.breakdown;
+      const fieldOrder = [
+        'production_and_brand',
+        'circularity_and_end_of_life',
+        'material_composition'
+      ];
+      let weightedSum = 0;
+      let totalWeight = 0;
+      // Use user weights if available, else default to 5
+      let userWeights = { production_and_brand: 5, circularity_and_end_of_life: 5, material_composition: 5 };
+      try {
+        const settings = await new Promise(resolve => {
+          chrome.storage.sync.get(['settings'], (result) => resolve(result.settings || {}));
+        });
+        userWeights = {
+          production_and_brand: settings.production_and_brand || 5,
+          circularity_and_end_of_life: settings.circularity_and_end_of_life || 5,
+          material_composition: settings.material_composition || 5
+        };
+      } catch (e) {}
+      fieldOrder.forEach(key => {
+        const metricData = breakdown[key] || {};
+        let value = metricData.value || metricData.rating || "Unknown";
+        let fieldScore = typeof metricData.score === 'number' ? metricData.score : undefined;
+        let summaryScore = (value === "Unknown" && typeof fieldScore === 'number') ? 3 : (typeof fieldScore === 'number' ? fieldScore * userWeights[key] / 5 : 0);
+        weightedSum += summaryScore;
+        totalWeight += 1;
+      });
+      displayScore = totalWeight > 0 ? Math.ceil((weightedSum / totalWeight) * 10) : undefined;
+    }
     badge.innerHTML = `
       <h3 style="margin: 0 0 0.625rem 0; font-size: ${titleSize}; color: ${darkMode ? '#fff' : '#333'};">
         Sustainability Score
       </h3>
-      <div style="font-size: ${fontSize}; font-weight: bold; color: #${getColorForScore(sustainabilityData.score)};">
-        ${sustainabilityData.score}/100
+      <div style="font-size: ${fontSize}; font-weight: bold; color: #${getColorForScore(displayScore)};">
+        ${displayScore}/100
       </div>
       <p style="margin: 0.625rem 0 0 0; font-size: ${subtitleSize};">
         Click for details
@@ -991,4 +1024,27 @@
     });
     console.log("EcoShop: Observer started");
   }, 2000);
+
+  // Listen for fade out badge message
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === "fadeEcoShopBadge") {
+      const badge = document.getElementById('ecoshop-sustainability-badge');
+      if (badge) {
+        badge.style.transition = 'opacity 0.5s cubic-bezier(0.4,0,0.2,1)';
+        badge.style.opacity = '0';
+        setTimeout(() => {
+          if (badge.parentNode) badge.parentNode.removeChild(badge);
+          // After fade out, re-evaluate if badge should be shown again
+          // Only show badge if on a product page and settings allow
+          setTimeout(() => {
+            const productInfo = extractProductInfo && extractProductInfo();
+            if (productInfo && (productInfo.brand || productInfo.name)) {
+              // Optionally, check settings here if you want to respect badge visibility
+              sendToServiceWorker(productInfo);
+            }
+          }, 100); // Short delay to allow DOM update
+        }, 500);
+      }
+    }
+  });
 })();

@@ -1,23 +1,21 @@
 // EcoShop Options Script
 document.addEventListener('DOMContentLoaded', function() {
   // Elements
-  const carbonWeightInput = document.getElementById('carbon-weight');
-  const waterWeightInput = document.getElementById('water-weight');
-  const wasteWeightInput = document.getElementById('waste-weight');
-  const laborWeightInput = document.getElementById('labor-weight');
-  
-  const carbonWeightValue = document.getElementById('carbon-weight-value');
-  const waterWeightValue = document.getElementById('water-weight-value');
-  const wasteWeightValue = document.getElementById('waste-weight-value');
-  const laborWeightValue = document.getElementById('labor-weight-value');
-  
+  const productionAndBrandWeightInput = document.getElementById('production-and-brand-weight');
+  const materialCompositionWeightInput = document.getElementById('material-composition-weight');
+  const circularityAndEndOfLifeWeightInput = document.getElementById('circularity-and-end-of-life-weight');
+
+  const productionAndBrandWeightValue = document.getElementById('production-and-brand-weight-value');
+  const materialCompositionWeightValue = document.getElementById('material-composition-weight-value');
+  const circularityAndEndOfLifeWeightValue = document.getElementById('circularity-and-end-of-life-weight-value');
+
   const showBadgeCheckbox = document.getElementById('show-badge');
   const showAlternativesCheckbox = document.getElementById('show-alternatives');
   const badgePositionSelect = document.getElementById('badge-position');
   const darkModeCheckbox = document.getElementById('dark-mode');
   const apiEndpointInput = document.getElementById('api-endpoint');
   const dataContributionCheckbox = document.getElementById('data-contribution');
-  
+
   const restoreDefaultsButton = document.getElementById('restore-defaults');
   const saveSettingsButton = document.getElementById('save-settings');
   const statusMessage = document.getElementById('status-message');
@@ -35,13 +33,13 @@ document.addEventListener('DOMContentLoaded', function() {
     apiEndpoint: 'https://api.lxkhome.duckdns.org/api/score',
     dataContribution: false
   };
-  
+
   // Initialize theme from storage
   initTheme();
-  
+
   // Load settings when the page loads
   loadSettings();
-  
+
   // Initialize theme from saved preference
   async function initTheme() {
     try {
@@ -53,101 +51,103 @@ document.addEventListener('DOMContentLoaded', function() {
       setTheme(true);
     }
   }
-  
+
   // Set theme on page
   function setTheme(isDarkMode) {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }
-  
+
   function applySeniorMode(enabled) {
     document.documentElement.setAttribute('data-senior', enabled ? 'true' : 'false');
   }
 
 
   // Update display when sliders change
-  carbonWeightInput.addEventListener('input', () => {
-    carbonWeightValue.textContent = carbonWeightInput.value;
+  productionAndBrandWeightInput.addEventListener('input', () => {
+    productionAndBrandWeightValue.textContent = productionAndBrandWeightInput.value;
   });
-  
-  waterWeightInput.addEventListener('input', () => {
-    waterWeightValue.textContent = waterWeightInput.value;
+  materialCompositionWeightInput.addEventListener('input', () => {
+    materialCompositionWeightValue.textContent = materialCompositionWeightInput.value;
   });
-  
-  wasteWeightInput.addEventListener('input', () => {
-    wasteWeightValue.textContent = wasteWeightInput.value;
+  circularityAndEndOfLifeWeightInput.addEventListener('input', () => {
+    circularityAndEndOfLifeWeightValue.textContent = circularityAndEndOfLifeWeightInput.value;
   });
-  
-  laborWeightInput.addEventListener('input', () => {
-    laborWeightValue.textContent = laborWeightInput.value;
-  });
-  
+
   // Save settings when the save button is clicked
   saveSettingsButton.addEventListener('click', saveSettings);
-  
+
   // Restore defaults when the restore button is clicked
   restoreDefaultsButton.addEventListener('click', restoreDefaults);
-  
+
   // Toggle dark mode preview
   darkModeCheckbox.addEventListener('change', () => {
     const isDarkMode = darkModeCheckbox.checked;
     setTheme(isDarkMode);
     chrome.storage.sync.set({ 'darkMode': isDarkMode });
   });
-  
+
   // Save all current settings to storage
   function saveSettings() {
     const settings = {
-      carbonWeight: parseInt(carbonWeightInput.value),
-      waterWeight: parseInt(waterWeightInput.value),
-      wasteWeight: parseInt(wasteWeightInput.value),
-      laborWeight: parseInt(laborWeightInput.value),
+      production_and_brand: parseInt(productionAndBrandWeightInput.value),
+      material_composition: parseInt(materialCompositionWeightInput.value),
+      circularity_and_end_of_life: parseInt(circularityAndEndOfLifeWeightInput.value),
       showBadge: showBadgeCheckbox.checked,
       showAlternatives: showAlternativesCheckbox.checked,
-      badgePosition: badgePositionSelect.value,      darkMode: darkModeCheckbox.checked,
+      badgePosition: badgePositionSelect.value,
+      darkMode: darkModeCheckbox.checked,
       apiEndpoint: apiEndpointInput.value.trim(),
       dataContribution: dataContributionCheckbox.checked,
       seniorMode: document.getElementById('senior-mode').checked
-
     };
-    
+
     // Save both 'settings' object and the separate 'darkMode' setting for easier access
     chrome.storage.sync.set({ 
       settings: settings,
       darkMode: settings.darkMode
     }, () => {
       showStatus('Settings saved successfully!', 'success');
-      
       applySeniorMode(settings.seniorMode);
-
       // Notify the service worker that settings have changed
       chrome.runtime.sendMessage({ 
         action: "settingsUpdated", 
         settings: settings 
       });
+      // Force all open popups to refresh their scoring
+      chrome.tabs.query({}, function(tabs) {
+        tabs.forEach(tab => {
+          // Fade out the badge first
+          chrome.tabs.sendMessage(tab.id, { action: "fadeEcoShopBadge" });
+        });
+        setTimeout(() => {
+          tabs.forEach(tab => {
+            // Recalculate and redisplay the badge and browser action badge
+            chrome.tabs.sendMessage(tab.id, { action: "refreshEcoShopPopup" });
+            chrome.runtime.sendMessage({ action: "refreshEcoShopBadge", tabId: tab.id });
+          });
+        }, 500); // Wait for fade out animation (0.5s)
+      });
     });
   }
-  
+
   // Load saved settings from storage
   function loadSettings() {
     chrome.storage.sync.get(['settings', 'darkMode'], (data) => {
       const settings = data.settings || defaultSettings;
-      
+
       // If darkMode is set separately (from popup or content script), use that value
       const darkMode = data.darkMode !== undefined ? data.darkMode : settings.darkMode;
-      
+
       // Apply loaded settings to UI
-      carbonWeightInput.value = settings.carbonWeight;
-      carbonWeightValue.textContent = settings.carbonWeight;
-      
-      waterWeightInput.value = settings.waterWeight;
-      waterWeightValue.textContent = settings.waterWeight;
-      
-      wasteWeightInput.value = settings.wasteWeight;
-      wasteWeightValue.textContent = settings.wasteWeight;
-      
-      laborWeightInput.value = settings.laborWeight;
-      laborWeightValue.textContent = settings.laborWeight;
-      
+      productionAndBrandWeightInput.value = settings.production_and_brand || 3;
+      productionAndBrandWeightValue.textContent = settings.production_and_brand || 3;
+
+      materialCompositionWeightInput.value = settings.material_composition || 3;
+      materialCompositionWeightValue.textContent = settings.material_composition || 3;
+
+      circularityAndEndOfLifeWeightInput.value = settings.circularity_and_end_of_life || 3;
+      circularityAndEndOfLifeWeightValue.textContent = settings.circularity_and_end_of_life || 3;
+
       showBadgeCheckbox.checked = settings.showBadge;
       showAlternativesCheckbox.checked = settings.showAlternatives;
       badgePositionSelect.value = settings.badgePosition;
@@ -161,41 +161,38 @@ document.addEventListener('DOMContentLoaded', function() {
       setTheme(darkMode);
     });
   }
-  
+
   // Restore default settings
   function restoreDefaults() {
     // Apply default settings to UI
-    carbonWeightInput.value = defaultSettings.carbonWeight;
-    carbonWeightValue.textContent = defaultSettings.carbonWeight;
-    
-    waterWeightInput.value = defaultSettings.waterWeight;
-    waterWeightValue.textContent = defaultSettings.waterWeight;
-    
-    wasteWeightInput.value = defaultSettings.wasteWeight;
-    wasteWeightValue.textContent = defaultSettings.wasteWeight;
-    
-    laborWeightInput.value = defaultSettings.laborWeight;
-    laborWeightValue.textContent = defaultSettings.laborWeight;
-    
+    productionAndBrandWeightInput.value = defaultSettings.production_and_brand || 3;
+    productionAndBrandWeightValue.textContent = defaultSettings.production_and_brand || 3;
+
+    materialCompositionWeightInput.value = defaultSettings.material_composition || 3;
+    materialCompositionWeightValue.textContent = defaultSettings.material_composition || 3;
+
+    circularityAndEndOfLifeWeightInput.value = defaultSettings.circularity_and_end_of_life || 3;
+    circularityAndEndOfLifeWeightValue.textContent = defaultSettings.circularity_and_end_of_life || 3;
+
     showBadgeCheckbox.checked = defaultSettings.showBadge;
     showAlternativesCheckbox.checked = defaultSettings.showAlternatives;
     badgePositionSelect.value = defaultSettings.badgePosition;
     darkModeCheckbox.checked = defaultSettings.darkMode;
-      apiEndpointInput.value = defaultSettings.apiEndpoint;
+    apiEndpointInput.value = defaultSettings.apiEndpoint;
     dataContributionCheckbox.checked = defaultSettings.dataContribution;
-    
+
     applySeniorMode(defaultSettings.seniorMode);
 
     setTheme(defaultSettings.darkMode);
-    
+
     showStatus('Default settings restored. Click Save to apply.', 'success');
   }
-  
+
   // Display status message
   function showStatus(message, type) {
     statusMessage.textContent = message;
     statusMessage.className = 'status-message ' + type;
-    
+
     // Clear the message after a few seconds
     setTimeout(() => {
       statusMessage.className = 'status-message';

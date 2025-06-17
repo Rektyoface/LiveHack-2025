@@ -148,6 +148,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       sendResponse({ success: true });
       return true;
+    } else if (message.action === "refreshEcoShopBadge" && message.tabId) {
+      // Try to get the latest cached data for this tab and update the badge
+      const cachedData = getCachedDataForTab(message.tabId);
+      if (cachedData) {
+        updateBadgeForTab(message.tabId, cachedData);
+      }
+      sendResponse && sendResponse({ success: true });
+      return true;
+    } else if (message.action === "setBadgeScore" && typeof message.score === 'number') {
+      if (sender && sender.tab && sender.tab.id) {
+        chrome.action.setBadgeText({ text: String(message.score), tabId: sender.tab.id });
+        let color = '#FFC107';
+        if (message.score >= 70) color = '#4CAF50';
+        else if (message.score < 40) color = '#F44336';
+        chrome.action.setBadgeBackgroundColor({ color, tabId: sender.tab.id });
+      }
+      sendResponse && sendResponse({ success: true });
+      return true;
     }
   } catch (err) {
     console.error("Service worker error:", err);
@@ -643,16 +661,46 @@ function generateTestScore(productInfo) {
 }
 
 // Handle extension icon badge updates
-function updateBadgeForTab(tabId, score) {
-  // Only show badge if score is a valid number and not fallback/test/unknown
+async function updateBadgeForTab(tabId, backendDataOrScore) {
+  let score = backendDataOrScore;
+  if (typeof backendDataOrScore === 'object' && backendDataOrScore !== null) {
+    const breakdown = backendDataOrScore.sustainability_breakdown || backendDataOrScore.breakdown;
+    if (breakdown) {
+      const settingsData = await new Promise(resolve => {
+        chrome.storage.sync.get(['settings'], (result) => {
+          resolve(result.settings || {});
+        });
+      });
+      const fieldWeightMap = {
+        production_and_brand: settingsData.production_and_brand || 5,
+        circularity_and_end_of_life: settingsData.circularity_and_end_of_life || 5,
+        material_composition: settingsData.material_composition || 5
+      };
+      const fieldOrder = [
+        'production_and_brand',
+        'circularity_and_end_of_life',
+        'material_composition'
+      ];
+      let weightedSum = 0;
+      let totalWeight = 0;
+      fieldOrder.forEach(key => {
+        const metricData = breakdown[key] || {};
+        let value = metricData.value || metricData.rating || "Unknown";
+        let fieldScore = typeof metricData.score === 'number' ? metricData.score : undefined;
+        let summaryScore = (value === "Unknown" && typeof fieldScore === 'number') ? 3 : (typeof fieldScore === 'number' ? fieldScore * fieldWeightMap[key] / 5 : 0);
+        weightedSum += summaryScore;
+        totalWeight += 1;
+      });
+      score = totalWeight > 0 ? Math.ceil((weightedSum / totalWeight) * 10) : undefined;
+    }
+  }
   if (typeof score === 'number' && !isNaN(score)) {
-    chrome.action.setBadgeText({ text: String(score), tabId }); // Use backend score directly for badge
+    chrome.action.setBadgeText({ text: String(score), tabId });
     let color = '#FFC107';
     if (score >= 70) color = '#4CAF50';
     else if (score < 40) color = '#F44336';
     chrome.action.setBadgeBackgroundColor({ color, tabId });
   } else {
-    // Fade/clear badge if no valid score
     chrome.action.setBadgeText({ text: '', tabId });
     chrome.action.setBadgeBackgroundColor({ color: '#888', tabId });
   }
