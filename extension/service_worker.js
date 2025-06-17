@@ -718,3 +718,5 @@ function formatAsPlainText(info) {
   
   return lines.join('\n');
 }
+
+// All weighting is now handled in the frontend. No changes needed here.

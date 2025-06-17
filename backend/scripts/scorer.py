@@ -2,14 +2,6 @@
 # Part 1: Configuration
 # ==============================================================================
 
-# Default weights for the three-category model.
-# These represent the relative importance of each category.
-DEFAULT_WEIGHTS = {
-    "material_composition": 4,
-    "production_and_brand": 4,
-    "circularity_and_end_of_life": 2,
-}
-
 # A single, standardized map for converting the LLM's ratings into numerical scores.
 # The scale is from -1.0 (very bad) to 1.0 (very good).
 RATING_SCORES = {
@@ -61,20 +53,16 @@ def generate_sustainability_breakdown(analysis_json: dict) -> dict:
 
 def calculate_weighted_score(sustainability_breakdown: dict, user_weights: dict | None = None) -> int:
     """
-    Calculates the final 0-100 score from the breakdown object and weights.
-    This is a direct, unadjusted calculation.
-    Unknown is now a penalty (score 3), no rebasing.
+    Calculates the final 0-100 score from the breakdown object. No weights are used; all fields are equally weighted.
     """
-    weights = user_weights or DEFAULT_WEIGHTS
-    total_weighted_score = 0
-    total_weights = 0
+    total_score = 0
+    count = 0
     for category, breakdown_details in sustainability_breakdown.items():
         score = breakdown_details.get('score', 3)  # Unknown is 3
         normalized_score = (score - 5) / 5  # 0->-1, 5->0, 10->1, 3->-0.4
-        weight = weights.get(category, 0)
-        total_weighted_score += normalized_score * weight
-        total_weights += weight
-    if total_weights == 0:
+        total_score += normalized_score
+        count += 1
+    if count == 0:
         return 50
-    normalized_score = 50 + 50 * (total_weighted_score / total_weights)
+    normalized_score = 50 + 50 * (total_score / count)
     return max(0, min(100, int(normalized_score)))

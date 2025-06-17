@@ -105,112 +105,110 @@ document.addEventListener('DOMContentLoaded', function() {
 
     sustainabilityMetricsContainer.innerHTML = '';
 
-    // Use 'sustainability_breakdown' if present, else fallback to 'breakdown' (from backend)
-    const breakdown = data.sustainability_breakdown || data.breakdown;
-    let detailsData = [];
-
-    if (breakdown) {
-      console.log("popup.js: sustainability_breakdown object:", breakdown); // Debug
+    // Get user weights from settings (default to 5 if missing)
+    chrome.storage.sync.get(['settings'], (settingsData) => {
+      const userWeights = settingsData.settings || {};
+      // Map backend fields to user weights (default 5)
+      const fieldWeightMap = {
+        production_and_brand: userWeights.production_and_brand || 5,
+        circularity_and_end_of_life: userWeights.circularity_and_end_of_life || 5,
+        material_composition: userWeights.material_composition || 5
+      };
+      // Use 'sustainability_breakdown' if present, else fallback to 'breakdown' (from backend)
+      const breakdown = data.sustainability_breakdown || data.breakdown;
+      let detailsData = [];
       const fieldOrder = [
         { key: 'production_and_brand', label: 'Production And Brand' },
         { key: 'circularity_and_end_of_life', label: 'Circularity And End Of Life' },
         { key: 'material_composition', label: 'Material Composition' }
       ];
-      fieldOrder.forEach(field => {
-        const metricData = breakdown[field.key] || {};
-        let value = metricData.value || metricData.rating || "Unknown";
-        let score = typeof metricData.score === 'number' ? metricData.score : undefined;
-        // No rebasing: display score directly
-        let displayFieldScore = score;
-        // Clamp displayFieldScore to 0-10 for user readability
-        if (typeof displayFieldScore === 'number') {
-          displayFieldScore = Math.max(0, Math.min(10, displayFieldScore));
-        }
-        // Show 'We could not find data' only if value is 'Unknown' or missing AND score is missing/undefined/-1/0
-        if ((value === "Unknown" || !value) && (score === undefined || score === -1 || score === 0)) {
-          value = "We could not find data";
-        }
-        // Show 'Unknown' if score is -1
-        let ratingText = (score === -1) ? '(Rating: Unknown --/10)' : (typeof displayFieldScore === 'number' ? `(Rating: ${displayFieldScore}/10)` : (score === 0 ? '(Rating: 0/10)' : '(Rating: --/10)'));
-        detailsData.push({
-          title: field.label,
-          value,
-          score: displayFieldScore,
-          analysis
+      if (breakdown) {
+        fieldOrder.forEach(field => {
+          const metricData = breakdown[field.key] || {};
+          let value = metricData.value || metricData.rating || "Unknown";
+          let score = typeof metricData.score === 'number' ? metricData.score : undefined;
+          // Apply user weight scaling (score * weight/5), round up only for display
+          let userWeight = fieldWeightMap[field.key] || 5;
+          let weightedScore = (typeof score === 'number') ? Math.ceil(score * userWeight / 5) : undefined;
+          let displayFieldScore = (typeof weightedScore === 'number') ? Math.max(0, Math.min(10, weightedScore)) : undefined;
+          if ((value === "Unknown" || !value) && (score === undefined || score === -1 || score === 0)) {
+            value = "We could not find data";
+          }
+          let ratingText = (score === -1) ? '(Rating: Unknown --/10)' : (typeof displayFieldScore === 'number' ? `(Rating: ${displayFieldScore}/10)` : (score === 0 ? '(Rating: 0/10)' : '(Rating: --/10)'));
+          detailsData.push({
+            title: field.label,
+            value,
+            score: displayFieldScore,
+            analysis: metricData.analysis || "We could not find data"
+          });
+          const metricElement = document.createElement('div');
+          metricElement.className = 'metric';
+          metricElement.innerHTML = `
+            <h3>${field.label}</h3>
+            <div class="metric-value">${value} ${ratingText}</div>
+            <div class="meter">
+              <div class="meter-bar" style="width: ${displayFieldScore && displayFieldScore > 0 ? displayFieldScore * 10 : 0}%; background-color: ${getScoreColor(displayFieldScore && displayFieldScore > 0 ? displayFieldScore * 10 : 0)};"></div>
+            </div>
+          `;
+          sustainabilityMetricsContainer.appendChild(metricElement);
         });
-        // Render summary in popup
-        const metricElement = document.createElement('div');
-        metricElement.className = 'metric';
-        metricElement.innerHTML = `
-          <h3>${field.label}</h3>
-          <div class="metric-value">${value} ${ratingText}</div>
-          <div class="meter">
-            <div class="meter-bar" style="width: ${displayFieldScore && displayFieldScore > 0 ? displayFieldScore * 10 : 0}%; background-color: ${getScoreColor(displayFieldScore && displayFieldScore > 0 ? displayFieldScore * 10 : 0)};"></div>
-          </div>
-        `;
-        sustainabilityMetricsContainer.appendChild(metricElement);
-      });
-    } else {
-      // Always show the 3 default fields with placeholder values
-      const defaultFields = [
-        { key: 'production_and_brand', label: 'Production And Brand' },
-        { key: 'circularity_and_end_of_life', label: 'Circularity And End Of Life' },
-        { key: 'material_composition', label: 'Material Composition' }
-      ];
-      defaultFields.forEach(field => {
-        detailsData.push({
-          title: field.label,
-          value: "we could not find data",
-          score: 0.0,
-          analysis: "we could not find data"
+      } else {
+        // Always show the 3 default fields with placeholder values
+        fieldOrder.forEach(field => {
+          detailsData.push({
+            title: field.label,
+            value: "We could not find data",
+            score: undefined,
+            analysis: "We could not find data"
+          });
+          const metricElement = document.createElement('div');
+          metricElement.className = 'metric';
+          metricElement.innerHTML = `
+            <h3>${field.label}</h3>
+            <div class="metric-value">We could not find data (Rating: --/10)</div>
+            <div class="meter">
+              <div class="meter-bar" style="width: 0%; background-color: #ccc;"></div>
+            </div>
+          `;
+          sustainabilityMetricsContainer.appendChild(metricElement);
         });
-        const metricElement = document.createElement('div');
-        metricElement.className = 'metric';
-        metricElement.innerHTML = `
-          <h3>${field.label}</h3>
-          <div class="metric-value">we could not find data (Rating: --/10)</div>
-          <div class="meter">
-            <div class="meter-bar" style="width: 0%; background-color: #ccc;"></div>
-          </div>
-        `;
-        sustainabilityMetricsContainer.appendChild(metricElement);
-      });
-    }
+      }
 
-    // Show Details button logic
-    const showDetailsButton = document.getElementById('show-details');
-    showDetailsButton.disabled = false;
-    showDetailsButton.onclick = function() {
-      chrome.storage.local.set({ sustainabilityDetails: { allFields: detailsData } }, function() {
-        window.location.href = 'details.html';
-      });
-    }
-
-    if (data.certainty) { // Assuming certainty is still part of the response
-      dataCertaintyElement.textContent = capitalizeFirstLetter(data.certainty);
-    }
-    if (data.message) { // Assuming message is still part of the response
-      sustainabilityMessageElement.textContent = data.message;
-    } else {
-      sustainabilityMessageElement.textContent = getDefaultMessage(mainScore);
-    }
-    if (data.alternatives && data.alternatives.length > 0) {
-      alternativesListElement.innerHTML = '';
-      data.alternatives.forEach(alt => {
-        const altElement = document.createElement('div');
-        altElement.className = 'alternative-item';
-        altElement.innerHTML = `
-          <div class="alternative-name">${alt.brand}</div>
-          <div class="alternative-score" style="background-color: ${getScoreColor(alt.score)}">${alt.score}</div>
-        `;
-        altElement.addEventListener('click', () => {
-          window.open(`https://www.google.com/search?q=${encodeURIComponent(alt.brand)}+sustainable+products`, '_blank');
+      // Show Details button logic
+      const showDetailsButton = document.getElementById('show-details');
+      showDetailsButton.disabled = false;
+      showDetailsButton.onclick = function() {
+        chrome.storage.local.set({ sustainabilityDetails: { allFields: detailsData } }, function() {
+          window.location.href = 'details.html';
         });
-        alternativesListElement.appendChild(altElement);
-      });
-    } else {
-      document.querySelector('.alternatives-container').classList.add('hidden');
-    }
+      }
+
+      if (data.certainty) { // Assuming certainty is still part of the response
+        dataCertaintyElement.textContent = capitalizeFirstLetter(data.certainty);
+      }
+      if (data.message) { // Assuming message is still part of the response
+        sustainabilityMessageElement.textContent = data.message;
+      } else {
+        sustainabilityMessageElement.textContent = getDefaultMessage(mainScore);
+      }
+      if (data.alternatives && data.alternatives.length > 0) {
+        alternativesListElement.innerHTML = '';
+        data.alternatives.forEach(alt => {
+          const altElement = document.createElement('div');
+          altElement.className = 'alternative-item';
+          altElement.innerHTML = `
+            <div class="alternative-name">${alt.brand}</div>
+            <div class="alternative-score" style="background-color: ${getScoreColor(alt.score)}">${alt.score}</div>
+          `;
+          altElement.addEventListener('click', () => {
+            window.open(`https://www.google.com/search?q=${encodeURIComponent(alt.brand)}+sustainable+products`, '_blank');
+          });
+          alternativesListElement.appendChild(altElement);
+        });
+      } else {
+        document.querySelector('.alternatives-container').classList.add('hidden');
+      }
+    });
   }
 
   function showNoProductMessage(message = "Please visit a product page to see sustainability information") {

@@ -22,7 +22,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.db import products_collection
 from scripts.url_parser import parse_shopee_url
 from scripts.analyzer import get_full_product_analysis
-from scripts.scorer import generate_sustainability_breakdown, calculate_weighted_score, DEFAULT_WEIGHTS
+from scripts.scorer import generate_sustainability_breakdown, calculate_weighted_score
 
 
 # --- Step 2: Define the main processing function ---
@@ -97,8 +97,7 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         # Use the stored breakdown to perform a very fast recalculation
         logger.info("Recalculating score with user weights...")
         personalized_score = calculate_weighted_score(
-            existing_product['sustainability_breakdown'], 
-            user_weights
+            existing_product['sustainability_breakdown']
         )
         logger.info(f"Personalized score calculated: {personalized_score}")
         
@@ -148,7 +147,7 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
 
     # 4c. Calculate the default score that will be stored permanently in the database
     logger.info("=== STEP 4C: CALCULATING DEFAULT SCORE ===")
-    default_score_for_db = calculate_weighted_score(sustainability_breakdown, DEFAULT_WEIGHTS)
+    default_score_for_db = calculate_weighted_score(sustainability_breakdown)
     logger.info(f"Default score calculated: {default_score_for_db}")
     
     # 4d. Assemble the new, lean document to be inserted into MongoDB
@@ -185,7 +184,7 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
         
         # Calculate the personalized score for the user
         logger.info("Calculating personalized score for response...")
-        personalized_score = calculate_weighted_score(sustainability_breakdown, user_weights)
+        personalized_score = calculate_weighted_score(sustainability_breakdown)
         response_document['sustainability_score'] = personalized_score
         logger.info(f"Personalized score: {personalized_score}")
         
@@ -211,10 +210,8 @@ def process_shopee_product(url: str, raw_text: str, user_weights: dict | None = 
                 # Calculate personalized score using the existing sustainability breakdown
                 logger.info("Calculating personalized score for existing product...")
                 personalized_score = calculate_weighted_score(
-                    existing_doc['sustainability_breakdown'], 
-                    user_weights
+                    existing_doc['sustainability_breakdown']
                 )
-                
                 # Prepare response document
                 existing_doc['sustainability_score'] = personalized_score
                 

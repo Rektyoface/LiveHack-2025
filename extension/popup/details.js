@@ -5,17 +5,35 @@ document.addEventListener('DOMContentLoaded', function () {
 
   chrome.storage.local.get(['sustainabilityDetails'], function (result) {
     if (result.sustainabilityDetails && result.sustainabilityDetails.allFields) {
-      const allFields = result.sustainabilityDetails.allFields;
-      let html = '';
-      allFields.forEach(field => {
-        html += `<div class="details-section">
-          <h2>${field.title}</h2>
-          <div><strong>Rating:</strong> ${field.value} (${field.score ? field.score * 10 : '--'}/10)</div>
-          <div><strong>Details:</strong> <p>${field.analysis.replace(/\n/g, '<br>')}</p></div>
-        </div><hr>`;
+      // Get user weights from settings (default to 5 if missing)
+      chrome.storage.sync.get(['settings'], (settingsData) => {
+        const userWeights = settingsData.settings || {};
+        const fieldWeightMap = {
+          production_and_brand: userWeights.production_and_brand || 5,
+          circularity_and_end_of_life: userWeights.circularity_and_end_of_life || 5,
+          material_composition: userWeights.material_composition || 5
+        };
+        const allFields = result.sustainabilityDetails.allFields;
+        let html = '';
+        allFields.forEach(field => {
+          // Try to map label to key for weight
+          let key = null;
+          if (field.title.toLowerCase().includes('production')) key = 'production_and_brand';
+          else if (field.title.toLowerCase().includes('circularity')) key = 'circularity_and_end_of_life';
+          else if (field.title.toLowerCase().includes('material')) key = 'material_composition';
+          let userWeight = key ? fieldWeightMap[key] : 5;
+          let displayScore = (typeof field.score === 'number') ? Math.ceil(field.score * userWeight / 5) : field.score;
+          if (typeof displayScore === 'number' && displayScore > 10) displayScore = Math.ceil(displayScore / 10);
+          let scoreText = (displayScore === undefined || displayScore === null) ? '--' : displayScore;
+          html += `<div class="details-section">
+            <h2>${field.title}</h2>
+            <div><strong>Rating:</strong> ${field.value} (${scoreText}/10)</div>
+            <div><strong>Details:</strong> <p>${field.analysis.replace(/\n/g, '<br>')}</p></div>
+          </div><hr>`;
+        });
+        detailsContentElement.innerHTML = html;
+        chrome.storage.local.remove(['sustainabilityDetails']);
       });
-      detailsContentElement.innerHTML = html;
-      chrome.storage.local.remove(['sustainabilityDetails']);
     } else {
       detailsContentElement.innerHTML = '<p>Could not load sustainability details. Please try again.</p>';
     }
