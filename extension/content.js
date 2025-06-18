@@ -679,11 +679,14 @@
       console.log("EcoShop: Same product already extracted, skipping");
       return;
     }
-    
-    lastExtractedProduct = productKey;
+      lastExtractedProduct = productKey;
     hasRequestedData = true;
     console.log("EcoShop: Extraction successful, setting flags but keeping observer active");
-    console.log("EcoShop: Sending to service worker", productInfo);
+    console.log("EcoShop: Sending to service worker for fresh database data", productInfo);
+    
+    // Show loading toast while fetching fresh data from database
+    showToast("EcoShop: Fetching fresh data from database...", 3000);
+    
     chrome.runtime.sendMessage({ 
       action: "checkSustainability", 
       productInfo: productInfo 
@@ -693,11 +696,12 @@
         showToast("EcoShop: Extension error - please try refreshing the page", 5000);
         return;
       }
-      
-      if (response && response.success) {
+        if (response && response.success) {
+        console.log("EcoShop: Fresh data received from database, displaying badge");
+        showToast("EcoShop: Fresh data loaded from database!", 2000);
         displaySustainabilityBadge(response.data);
       } else if (response && response.error) {
-        console.error("Error getting sustainability data:", response.error);
+        console.error("Error getting fresh sustainability data:", response.error);
         if (response.error.includes("Database connection") && !hasShownErrorToast) {
           hasShownErrorToast = true;
           showToast("EcoShop: Database connection required. Please check your internet connection.", 5000);
@@ -706,7 +710,7 @@
           showToast(`EcoShop: ${response.message || response.error}`, 4000);
         }
       } else {
-        console.error("Unknown error getting sustainability data:", response);
+        console.error("Unknown error getting fresh sustainability data:", response);
         if (!hasShownErrorToast) {
           hasShownErrorToast = true;
           showToast("EcoShop: Unable to load sustainability data", 4000);
@@ -736,55 +740,42 @@
     });
   }
 
-  // Display a sustainability badge on the page
+  // Display a sustainability badge on the page  
   async function displaySustainabilityBadge(sustainabilityData) {
+    console.log("=== CONTENT.JS: displaySustainabilityBadge called ===");
+    console.log("content.js: Raw sustainabilityData received:", JSON.stringify(sustainabilityData, null, 2));
+    
     // Get user preferences
     const preferences = await getUserPreferences();
     const darkMode = preferences.darkMode;
     const seniorMode = preferences.seniorMode;
     
-    // Calculate the weighted/averaged score and round up after division, matching popup logic
+    // ALWAYS use the fresh backend score directly - no frontend calculation
     let displayScore = sustainabilityData.score;
-    if (sustainabilityData.sustainability_breakdown || sustainabilityData.breakdown) {
-      const breakdown = sustainabilityData.sustainability_breakdown || sustainabilityData.breakdown;
-      const fieldOrder = [
-        'production_and_brand',
-        'circularity_and_end_of_life',
-        'material_composition'
-      ];
-      let weightedSum = 0;
-      let totalWeight = 0;
-      // Use user weights if available, else default to 5
-      let userWeights = { production_and_brand: 5, circularity_and_end_of_life: 5, material_composition: 5 };
-      try {
-        const settings = await new Promise(resolve => {
-          chrome.storage.sync.get(['settings'], (result) => resolve(result.settings || {}));
-        });
-        userWeights = {
-          production_and_brand: settings.production_and_brand || 5,
-          circularity_and_end_of_life: settings.circularity_and_end_of_life || 5,
-          material_composition: settings.material_composition || 5
-        };
-      } catch (e) {}
-      // Calculate total weight first
-      fieldOrder.forEach(key => {
-        totalWeight += userWeights[key] || 5;
-      });
-      fieldOrder.forEach(key => {
-        const metricData = breakdown[key] || {};
-        let fieldScore = typeof metricData.score === 'number' ? metricData.score : undefined;
-        let summaryScore = (typeof fieldScore === 'number') ? fieldScore * userWeights[key] / totalWeight : 0;
-        weightedSum += summaryScore;
-      });
-      displayScore = weightedSum > 0 ? Math.round(weightedSum * 10) : undefined;
+    
+    console.log("content.js: Raw backend score from sustainabilityData:", sustainabilityData.score);
+    console.log("content.js: Using fresh backend score directly:", displayScore);
+    console.log("content.js: Backend score type:", typeof displayScore);
+    
+    // Validate the backend score
+    if (typeof displayScore !== 'number' || isNaN(displayScore)) {
+      console.warn("content.js: Backend score invalid, not showing badge:", displayScore);
+      console.warn("content.js: sustainabilityData keys:", Object.keys(sustainabilityData));
+      return; // Don't show badge if no valid score from backend
     }
-    // Always update the browser action badge, regardless of showBadge setting
+    
+    // Round the backend score for display
+    displayScore = Math.round(displayScore);
+    console.log("content.js: Final display score from backend:", displayScore);
+    
+    // Always update the browser action badge with fresh backend score
     chrome.runtime.sendMessage({ action: "setBadgeScoreFromContent", displayScore });
     // If showBadge is disabled, don't show the floating badge but still set browser action badge
     if (!preferences.showBadge) {
-      console.log("EcoShop: Floating badge disabled by user preference, but browser action badge updated");
+      console.log("EcoShop: Floating badge disabled by user preference, but browser action badge updated with fresh score");
       return;
     }
+    
     // Check if there's already a floating badge
     let badge = document.getElementById('ecoshop-sustainability-badge');
     if (badge) {

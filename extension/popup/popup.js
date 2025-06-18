@@ -7,8 +7,8 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('✅ Applied senior mode:', seniorEnabled);
     console.log('🔎 Final attribute:', document.documentElement.getAttribute('data-senior'));
   });
-
   const loadingElement = document.getElementById('loading');
+  const loadingMessageElement = document.getElementById('loading-message');
   const noProductElement = document.getElementById('no-product');
   const productInfoElement = document.getElementById('product-info');
   const brandNameElement = document.getElementById('brand-name');
@@ -39,6 +39,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }  // Show loading state initially - always fetch fresh data
   showLoadingState();
+  
+  // Start progressive loading messages after a short delay
+  setTimeout(() => {
+    showProgressiveLoading();
+  }, 1000);
   
   chrome.tabs.query({active: true, currentWindow: true}, async function(tabs) {
     if (tabs.length === 0) {
@@ -93,28 +98,12 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log("=== POPUP.JS: FRESH DATA FROM DATABASE ===");
     console.log("Full response object:", JSON.stringify(response, null, 2));
     
-    if (response && response.data) {
-      console.log("=== POPUP.JS: FRESH DATA OBJECT DETAILED ===");
-      console.log("Data keys:", Object.keys(response.data));
-      console.log("Fresh Score from DB:", response.data.score);
-      console.log("Fresh Recommendations from DB:", response.data.recommendations);
-      console.log("Recommendations count:", response.data.recommendations ? response.data.recommendations.length : 0);
-      
-      if (response.data.recommendations && response.data.recommendations.length > 0) {
-        console.log("=== POPUP.JS: FRESH RECOMMENDATIONS FROM DATABASE ===");
-        response.data.recommendations.forEach((rec, index) => {
-          console.log(`Fresh Recommendation ${index + 1}:`, JSON.stringify(rec, null, 2));
-          console.log(`  - Has url field:`, 'url' in rec);
-          console.log(`  - Has score field:`, 'score' in rec);
-          console.log(`  - URL value:`, rec.url);
-          console.log(`  - Score value:`, rec.score);
-        });
-      }
+    // Clear the progressive loading interval
+    if (window.ecoshopLoadingInterval) {
+      clearInterval(window.ecoshopLoadingInterval);
+      window.ecoshopLoadingInterval = null;
     }
     
-    window._lastEcoShopData = response;
-    console.log("popup.js: Fresh data received from database:", response);
-
     // Hide loading state
     loadingElement.classList.add('hidden');
     
@@ -326,7 +315,6 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // Learn More button - remove the incorrect details navigation  // The "Show Details" button handles navigation to details page
-
   function showLoadingState() {
     loadingElement.classList.remove('hidden');
     noProductElement.classList.add('hidden');
@@ -341,6 +329,40 @@ document.addEventListener('DOMContentLoaded', function() {
       brandNameElement.textContent = 'Loading...';
     }
     
+    // Start progressive loading messages
+    updateLoadingMessage("Fetching fresh data from database...");
+    
     console.log("popup.js: Showing loading state - fetching fresh data from database");
+  }
+  
+  function updateLoadingMessage(message) {
+    if (loadingMessageElement) {
+      loadingMessageElement.textContent = message;
+    }
+  }
+    function showProgressiveLoading() {
+    let step = 0;
+    const messages = [
+      "Fetching fresh data from database...",
+      "Analyzing sustainability metrics...",
+      "Calculating scores and recommendations...",
+      "Preparing detailed breakdown..."
+    ];
+    
+    const interval = setInterval(() => {
+      if (step < messages.length) {
+        updateLoadingMessage(messages[step]);
+        step++;
+        
+        // If we're past the first step and still loading, it's likely a cache miss with LLM analysis
+        if (step >= 2) {
+          updateLoadingMessage("Analyzing product sustainability...");
+          clearInterval(interval);
+        }
+      }
+    }, 3000); // Change message every 3 seconds for cache hit, then switch to analyzing for cache miss
+    
+    // Store interval ID to clear it when data arrives
+    window.ecoshopLoadingInterval = interval;
   }
 });

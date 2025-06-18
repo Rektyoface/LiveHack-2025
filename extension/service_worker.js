@@ -364,24 +364,36 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
       if (scrapedProductsHistory.length > 100) scrapedProductsHistory.pop();
     }    // ALWAYS fetch fresh data from database - no caching
     console.log("Service worker: Always fetching fresh data from database...");
+    const startTime = Date.now();
     const cacheKey = productInfo.url || (productInfo.brand || productInfo.name)?.toLowerCase();
 
     // 1. Try backend API - ALWAYS call database for most accurate info
     try {
       console.log("Service worker: Calling backend API for fresh database data...");
       const apiData = await fetchFromApi(transformed, productInfo.brand);
-      if (apiData && typeof apiData.score === 'number' && !isNaN(apiData.score)) {        console.log("=== SERVICE WORKER: BACKEND API SUCCESS ===");
+      const processingTime = Date.now() - startTime;
+      
+      if (apiData && typeof apiData.score === 'number' && !isNaN(apiData.score)) {
+        console.log("=== SERVICE WORKER: BACKEND API SUCCESS ===");
         console.log("Fresh data from database:", JSON.stringify(apiData, null, 2));
         console.log("Specifically, fresh score from database:", apiData.score);
+        console.log(`Processing took ${processingTime}ms`);
         
         // Don't cache - always fresh data
-        // Add timestamp for logging purposes only
+        // Add timestamp and processing time for logging purposes only
         apiData.timestamp = Date.now();
+        apiData.processingTimeMs = processingTime;
         
         if (sender?.tab?.id) {
           updateBadgeForTab(sender.tab.id, apiData.score);
           tabDataCache[sender.tab.id] = apiData;
-          sendToastToTab(sender.tab.id, `EcoShop: Fresh analysis complete! Score: ${apiData.score}`);
+          
+          // Show different toast messages based on processing time
+          if (processingTime > 8000) {
+            sendToastToTab(sender.tab.id, `EcoShop: Analysis complete! Score: ${apiData.score} (full analysis)`);
+          } else {
+            sendToastToTab(sender.tab.id, `EcoShop: Fresh data loaded! Score: ${apiData.score}`);
+          }
         }
         
         // Send the fresh response
