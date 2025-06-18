@@ -11,11 +11,8 @@ document.addEventListener('DOMContentLoaded', function() {
   const loadingMessageElement = document.getElementById('loading-message');
   const noProductElement = document.getElementById('no-product');
   const productInfoElement = document.getElementById('product-info');
-  const brandNameElement = document.getElementById('brand-name');
-  const scoreValueElement = document.getElementById('score-value');
+  const brandNameElement = document.getElementById('brand-name');  const scoreValueElement = document.getElementById('score-value');
   const sustainabilityMetricsContainer = document.getElementById('sustainability-metrics-container'); // New container
-  const dataCertaintyElement = document.getElementById('data-certainty');
-  const sustainabilityMessageElement = document.getElementById('sustainability-message');
   const alternativesListElement = document.getElementById('alternatives-list');
   const optionsButton = document.getElementById('options-button');
   const learnMoreButton = document.getElementById('learn-more');
@@ -304,21 +301,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       } else {
         showRecommendationsButton.style.display = 'block';
-        showRecommendationsButton.disabled = true;
-        showRecommendationsButton.textContent = 'No Recommendations Available';
+        showRecommendationsButton.disabled = true;        showRecommendationsButton.textContent = 'No Recommendations Available';
         showRecommendationsButton.style.opacity = '0.6';
       }
     });
-
-    if (data.certainty) {
-      dataCertaintyElement.textContent = capitalizeFirstLetter(data.certainty);
-    }
-    
-    if (data.message) {
-      sustainabilityMessageElement.textContent = data.message;
-    } else {
-      sustainabilityMessageElement.textContent = getDefaultMessage(displayScore);
-    }
 
     if (data.alternatives && data.alternatives.length > 0) {
       alternativesListElement.innerHTML = '';
@@ -356,13 +342,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function capitalizeFirstLetter(string) {
     return string.charAt(0).toUpperCase() + string.slice(1);
   }
-
-  function getDefaultMessage(score) {
-    if (score === undefined || score === null) return "We could not find any sustainability information for this product.";
-    if (score >= 70) return "This product has good sustainability practices.";
-    if (score >= 40) return "This product has average sustainability practices.";
-    return "This product has poor sustainability practices.";
-  }  optionsButton.addEventListener('click', () => {
+  optionsButton.addEventListener('click', () => {
     chrome.runtime.openOptionsPage();
   });
 

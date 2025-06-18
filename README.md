@@ -21,7 +21,7 @@
 2. **Enable Developer Mode**
    - Open your Chromium browser (Chrome, Edge, etc.)
    - Navigate to Extensions: `chrome://extensions/` (or `edge://extensions/` for Edge)
-   - Toggle **"Developer mode"** switch in the top-right corner
+   - Toggle **"Developer mode"** switch
 
 3. **Load the Extension**
    - Click **"Load unpacked"** button
@@ -53,7 +53,7 @@ The extension connects to a remote backend API automatically - no additional set
 
 #### **📊 Main Popup** (Click extension icon)
 - **Sustainability Score**: Overall rating out of 100
-- **Brand Information**: Product brand and certainty level
+- **Brand Information**: Product brand name
 - **Breakdown Metrics**: Three key sustainability factors:
   - **Production and Brand**: Manufacturing practices, certifications
   - **Circularity and End of Life**: Recycling, disposal impact
@@ -331,11 +331,9 @@ Visit any Shopee product page (e.g., Sony headphones) and check:
   "data": {
     "brand": "Sony",
     "score": 75,
-    "co2e": 2.5,
-    "waterUsage": "low",
+    "co2e": 2.5,    "waterUsage": "low",
     "wasteGenerated": "low", 
     "laborPractices": "good",
-    "certainty": "high",
     "message": "Test data for Sony - MongoDB not connected"
   },
   "status": "test_mode"
