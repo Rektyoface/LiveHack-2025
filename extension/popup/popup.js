@@ -37,8 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function setTheme(isDarkMode) {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
-  }
-  // Show loading state initially - no default values
+  }  // Show loading state initially - always fetch fresh data
   showLoadingState();
   
   chrome.tabs.query({active: true, currentWindow: true}, async function(tabs) {
@@ -56,21 +55,9 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
     
-    // First, try to get cached data for this specific URL
-    const cacheKey = currentTab.url;
-    try {
-      const cachedData = await getCachedData(cacheKey);
-      if (cachedData && isDataFresh(cachedData)) {
-        console.log("popup.js: Using cached data for", cacheKey);
-        handleSustainabilityData({ success: true, data: cachedData.data });
-        return;
-      }
-    } catch (error) {
-      console.log("popup.js: No cached data or error reading cache:", error);
-    }
+    // ALWAYS fetch fresh data from database - no caching
+    console.log("popup.js: Always fetching fresh data from database for URL:", currentTab.url);
     
-    // If no cached data or data is stale, fetch from backend
-    console.log("popup.js: Fetching fresh data from backend...");
     chrome.tabs.sendMessage(currentTab.id, { action: "getProductInfo" }, function(response) {
       if (chrome.runtime.lastError || !response) {
         chrome.runtime.sendMessage({ 
@@ -78,10 +65,6 @@ document.addEventListener('DOMContentLoaded', function() {
           url: currentTab.url,
           title: currentTab.title
         }, (backendResponse) => {
-          if (backendResponse && backendResponse.success) {
-            // Cache the response for future use
-            cacheData(cacheKey, backendResponse.data);
-          }
           handleSustainabilityData(backendResponse);
         });
         return;
@@ -91,10 +74,6 @@ document.addEventListener('DOMContentLoaded', function() {
           action: "checkSustainability",
           productInfo: response.productInfo
         }, (backendResponse) => {
-          if (backendResponse && backendResponse.success) {
-            // Cache the response for future use
-            cacheData(cacheKey, backendResponse.data);
-          }
           handleSustainabilityData(backendResponse);
         });
       } else {
@@ -109,23 +88,22 @@ document.addEventListener('DOMContentLoaded', function() {
       // Always reload the popup to fetch latest settings and recalculate
       window.location.reload();
     }
-  });
-  // Patch: store last data for refresh
+  });  // Handle fresh sustainability data from database - ALWAYS fresh, never cached
   function handleSustainabilityData(response) {
-    console.log("=== POPUP.JS: RAW RESPONSE FROM BACKEND ===");
+    console.log("=== POPUP.JS: FRESH DATA FROM DATABASE ===");
     console.log("Full response object:", JSON.stringify(response, null, 2));
     
     if (response && response.data) {
-      console.log("=== POPUP.JS: DATA OBJECT DETAILED ===");
+      console.log("=== POPUP.JS: FRESH DATA OBJECT DETAILED ===");
       console.log("Data keys:", Object.keys(response.data));
-      console.log("Score:", response.data.score);
-      console.log("Recommendations:", response.data.recommendations);
-      console.log("Recommendations length:", response.data.recommendations ? response.data.recommendations.length : 0);
+      console.log("Fresh Score from DB:", response.data.score);
+      console.log("Fresh Recommendations from DB:", response.data.recommendations);
+      console.log("Recommendations count:", response.data.recommendations ? response.data.recommendations.length : 0);
       
       if (response.data.recommendations && response.data.recommendations.length > 0) {
-        console.log("=== POPUP.JS: RECOMMENDATIONS DETAILED ===");
+        console.log("=== POPUP.JS: FRESH RECOMMENDATIONS FROM DATABASE ===");
         response.data.recommendations.forEach((rec, index) => {
-          console.log(`Recommendation ${index + 1}:`, JSON.stringify(rec, null, 2));
+          console.log(`Fresh Recommendation ${index + 1}:`, JSON.stringify(rec, null, 2));
           console.log(`  - Has url field:`, 'url' in rec);
           console.log(`  - Has score field:`, 'score' in rec);
           console.log(`  - URL value:`, rec.url);
@@ -135,50 +113,55 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     window._lastEcoShopData = response;
-    console.log("popup.js: Received response in handleSustainabilityData:", response);
+    console.log("popup.js: Fresh data received from database:", response);
 
+    // Hide loading state
     loadingElement.classList.add('hidden');
+    
     if (!response || !response.success) {
-      console.error("popup.js: Response unsuccessful or missing.", response);
+      console.error("popup.js: Database response unsuccessful or missing.", response);
       if (response && response.error) {
-        if (response.error.includes("Database connection")) {
+        if (response.error.includes("Database connection") || response.error.includes("Backend service unavailable")) {
           showNoProductMessage("Database connection required. Please check your internet connection and ensure the backend service is running.");
         } else {
           showNoProductMessage(response.message || response.error);
         }
       } else {
-        showNoProductMessage("No sustainability data available");
+        showNoProductMessage("No fresh sustainability data available from database");
       }
-      return;
-    }    const data = response.data;
-    console.log("popup.js: Data object:", data);
-    console.log("popup.js: Backend score value:", data.score);
-    console.log("popup.js: Backend score type:", typeof data.score);
-
-    productInfoElement.classList.remove('hidden');
-      // CRITICAL: Use the backend score directly - no frontend calculation or defaults
-    const backendScore = data.score;
-    let displayScore;
-    
-    // Only show score if we have a valid number from backend
-    if (typeof backendScore === 'number' && !isNaN(backendScore)) {
-      displayScore = Math.round(backendScore);
-      console.log("popup.js: Using backend score:", displayScore);
-    } else {
-      console.warn("popup.js: Backend score not valid:", backendScore);
-      // Don't show a default - show that we're still waiting for data
-      showNoProductMessage("Score not available. Backend may still be processing.");
       return;
     }
 
-    // Update the main score display with backend score only
+    const data = response.data;
+    console.log("popup.js: Fresh data object from database:", data);
+    console.log("popup.js: Fresh backend score value:", data.score);
+    console.log("popup.js: Fresh backend score type:", typeof data.score);
+
+    // Show product info section
+    productInfoElement.classList.remove('hidden');
+    
+    // CRITICAL: Use the fresh backend score directly from database
+    const backendScore = data.score;
+    let displayScore;
+      // Only show score if we have a valid number from fresh database data
+    if (typeof backendScore === 'number' && !isNaN(backendScore)) {
+      displayScore = Math.round(backendScore);
+      console.log("popup.js: Using fresh database score:", displayScore);
+    } else {
+      console.warn("popup.js: Fresh database score not valid:", backendScore);
+      // Don't show a default - show that we need fresh data from database
+      showNoProductMessage("Fresh score not available from database. Please try again.");
+      return;
+    }
+
+    // Update the main score display with fresh database score only
     const scoreColor = getScoreColor(displayScore);
     scoreValueElement.style.color = '#FFF';
     scoreValueElement.parentElement.style.backgroundColor = scoreColor;
     brandNameElement.textContent = data.brand_name || data.brand || "Unknown Brand";
     scoreValueElement.textContent = displayScore;
 
-    console.log("popup.js: Updated main score display with:", displayScore);
+    console.log("popup.js: Updated main score display with fresh database score:", displayScore);
 
     // Update the browser action badge to match the popup score
     chrome.runtime.sendMessage({ action: "setBadgeScore", score: displayScore });
@@ -342,67 +325,7 @@ document.addEventListener('DOMContentLoaded', function() {
     chrome.runtime.openOptionsPage();
   });
 
-  // Learn More button - remove the incorrect details navigation
-  // The "Show Details" button handles navigation to details page
-
-  // Caching functions for persistent data storage
-  async function getCachedData(cacheKey) {
-    return new Promise((resolve) => {
-      chrome.storage.local.get([`cache_${cacheKey}`], (result) => {
-        const cacheData = result[`cache_${cacheKey}`];
-        resolve(cacheData);
-      });
-    });
-  }
-  
-  async function cacheData(cacheKey, data) {
-    const cacheEntry = {
-      data: data,
-      timestamp: Date.now(),
-      url: cacheKey
-    };
-    
-    chrome.storage.local.set({
-      [`cache_${cacheKey}`]: cacheEntry
-    }, () => {
-      console.log("popup.js: Cached data for", cacheKey);
-    });
-  }
-  
-  function isDataFresh(cachedEntry, maxAgeMinutes = 30) {
-    if (!cachedEntry || !cachedEntry.timestamp) return false;
-    const age = Date.now() - cachedEntry.timestamp;
-    const maxAge = maxAgeMinutes * 60 * 1000; // Convert to milliseconds
-    return age < maxAge;
-  }
-  
-  // Clean up old cached data periodically
-  async function cleanupOldCache() {
-    try {
-      const result = await chrome.storage.local.get();
-      const keysToRemove = [];
-      const maxAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-      
-      for (const [key, value] of Object.entries(result)) {
-        if (key.startsWith('cache_') && value.timestamp) {
-          const age = Date.now() - value.timestamp;
-          if (age > maxAge) {
-            keysToRemove.push(key);
-          }
-        }
-      }
-      
-      if (keysToRemove.length > 0) {
-        chrome.storage.local.remove(keysToRemove);
-        console.log(`popup.js: Cleaned up ${keysToRemove.length} old cache entries`);
-      }
-    } catch (error) {
-      console.error("popup.js: Error cleaning up cache:", error);
-    }
-  }
-  
-  // Run cleanup when popup opens
-  cleanupOldCache();
+  // Learn More button - remove the incorrect details navigation  // The "Show Details" button handles navigation to details page
 
   function showLoadingState() {
     loadingElement.classList.remove('hidden');
@@ -418,6 +341,6 @@ document.addEventListener('DOMContentLoaded', function() {
       brandNameElement.textContent = 'Loading...';
     }
     
-    console.log("popup.js: Showing loading state");
+    console.log("popup.js: Showing loading state - fetching fresh data from database");
   }
 });

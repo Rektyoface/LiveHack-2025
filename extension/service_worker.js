@@ -4,26 +4,13 @@
 console.log("EcoShop Service Worker starting up...");
 console.log("EcoShop Service Worker ACTIVE: [main service_worker.js] - v2025-06-17");
 
-// In-memory cache for faster lookups - URL-based caching
-let sustainabilityCache = {};
-
-// Cache cleanup interval (every 30 minutes)
-setInterval(() => {
-  const maxAge = 30 * 60 * 1000; // 30 minutes
-  const now = Date.now();
-  
-  for (const [key, data] of Object.entries(sustainabilityCache)) {
-    if (data.timestamp && (now - data.timestamp) > maxAge) {
-      delete sustainabilityCache[key];
-      console.log("Service worker: Cleaned up expired cache entry for", key);
-    }
-  }
-}, 30 * 60 * 1000); // Run every 30 minutes
+// Note: No caching - always fetch fresh data from database
+console.log("EcoShop Service Worker: Always fetching fresh data from database");
 
 // Store product data history for reference
 let scrapedProductsHistory = [];
 
-// Store cached data by tab ID for badge restoration
+// Store cached data by tab ID for badge restoration (minimal UI state only)
 let tabDataCache = {};
 
 // Store active SSE connections by task ID
@@ -375,55 +362,31 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
       };
       scrapedProductsHistory.unshift(productWithTimestamp);
       if (scrapedProductsHistory.length > 100) scrapedProductsHistory.pop();
-    }
-      // Check cache first - use URL-based caching for better accuracy
+    }    // ALWAYS fetch fresh data from database - no caching
+    console.log("Service worker: Always fetching fresh data from database...");
     const cacheKey = productInfo.url || (productInfo.brand || productInfo.name)?.toLowerCase();
-    if (cacheKey && sustainabilityCache[cacheKey]) {
-      const cachedData = sustainabilityCache[cacheKey];
-      // Check if cached data is fresh (within 30 minutes)
-      const cacheAge = Date.now() - (cachedData.timestamp || 0);
-      const maxCacheAge = 30 * 60 * 1000; // 30 minutes in milliseconds
-      
-      if (cacheAge < maxCacheAge) {
-        console.log("Service worker: Using cached data for", cacheKey);
-        if (sender?.tab?.id) {
-          updateBadgeForTab(sender.tab.id, cachedData.score);
-          tabDataCache[sender.tab.id] = cachedData;
-        }
-        sendResponse({ success: true, data: cachedData });
-        return;
-      } else {
-        console.log("Service worker: Cached data expired, fetching fresh data");
-        delete sustainabilityCache[cacheKey];
-      }
-    }
 
-    // 1. Try backend API - ALWAYS wait for complete response
+    // 1. Try backend API - ALWAYS call database for most accurate info
     try {
-      console.log("Service worker: Fetching from backend API...");
+      console.log("Service worker: Calling backend API for fresh database data...");
       const apiData = await fetchFromApi(transformed, productInfo.brand);
       if (apiData && typeof apiData.score === 'number' && !isNaN(apiData.score)) {        console.log("=== SERVICE WORKER: BACKEND API SUCCESS ===");
-        console.log("Data being sent to popup:", JSON.stringify(apiData, null, 2));
-        console.log("Specifically, score being sent:", apiData.score);
+        console.log("Fresh data from database:", JSON.stringify(apiData, null, 2));
+        console.log("Specifically, fresh score from database:", apiData.score);
         
-        // Add timestamp for caching
+        // Don't cache - always fresh data
+        // Add timestamp for logging purposes only
         apiData.timestamp = Date.now();
-        
-        // Cache the valid response
-        if (cacheKey) {
-          sustainabilityCache[cacheKey] = apiData;
-          console.log("Service worker: Cached data for", cacheKey);
-        }
         
         if (sender?.tab?.id) {
           updateBadgeForTab(sender.tab.id, apiData.score);
           tabDataCache[sender.tab.id] = apiData;
-          sendToastToTab(sender.tab.id, `EcoShop: Analysis complete! Score: ${apiData.score}`);
+          sendToastToTab(sender.tab.id, `EcoShop: Fresh analysis complete! Score: ${apiData.score}`);
         }
         
-        // Send the response with valid data
+        // Send the fresh response
         const responseToSend = { success: true, data: apiData };
-        console.log("Service worker sending valid response:", responseToSend);
+        console.log("Service worker sending fresh database response:", responseToSend);
         sendResponse(responseToSend);
         return;
       } else {
