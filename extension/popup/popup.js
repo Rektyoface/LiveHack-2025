@@ -272,31 +272,43 @@ document.addEventListener('DOMContentLoaded', function() {
       chrome.storage.local.set({ sustainabilityDetails: { allFields: detailsData } }, function() {
         window.location.href = 'details.html';
       });
-    }
-
-    // Show Recommendations button logic
+    }    // Show Recommendations button logic
     const showRecommendationsButton = document.getElementById('show-recommendations');
     const recommendations = data.recommendations || [];
     
     console.log('Recommendations from backend:', recommendations);
     
-    if (recommendations.length > 0) {
-      showRecommendationsButton.disabled = false;
-      showRecommendationsButton.textContent = `View Recommendations (${recommendations.length})`;
-      showRecommendationsButton.onclick = function() {
-        console.log('Storing recommendations:', recommendations);
-        chrome.storage.local.set({ 
-          sustainabilityRecommendations: recommendations,
-          currentProductCategory: data.category || 'Unknown'
-        }, function() {
-          window.location.href = 'recommendations.html';
-        });
+    // Check if the showAlternatives setting is enabled
+    chrome.storage.sync.get(['settings'], (result) => {
+      const settingsData = result.settings || {};
+      const showAlternativesEnabled = settingsData.showAlternatives !== false; // Default to true
+      
+      console.log('Show alternatives setting:', showAlternativesEnabled);
+      
+      if (!showAlternativesEnabled) {
+        // Hide the recommendations button if the setting is disabled
+        showRecommendationsButton.style.display = 'none';
+        console.log('Recommendations button hidden due to settings');
+      } else if (recommendations.length > 0) {
+        showRecommendationsButton.style.display = 'block';
+        showRecommendationsButton.disabled = false;
+        showRecommendationsButton.textContent = `View Recommendations (${recommendations.length})`;
+        showRecommendationsButton.onclick = function() {
+          console.log('Storing recommendations:', recommendations);
+          chrome.storage.local.set({ 
+            sustainabilityRecommendations: recommendations,
+            currentProductCategory: data.category || 'Unknown'
+          }, function() {
+            window.location.href = 'recommendations.html';
+          });
+        }
+      } else {
+        showRecommendationsButton.style.display = 'block';
+        showRecommendationsButton.disabled = true;
+        showRecommendationsButton.textContent = 'No Recommendations Available';
+        showRecommendationsButton.style.opacity = '0.6';
       }
-    } else {
-      showRecommendationsButton.disabled = true;
-      showRecommendationsButton.textContent = 'No Recommendations Available';
-      showRecommendationsButton.style.opacity = '0.6';
-    }
+    });
 
     if (data.certainty) {
       dataCertaintyElement.textContent = capitalizeFirstLetter(data.certainty);
@@ -350,12 +362,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (score >= 70) return "This product has good sustainability practices.";
     if (score >= 40) return "This product has average sustainability practices.";
     return "This product has poor sustainability practices.";
-  }
-  optionsButton.addEventListener('click', () => {
+  }  optionsButton.addEventListener('click', () => {
     chrome.runtime.openOptionsPage();
   });
 
-  // Learn More button - remove the incorrect details navigation  // The "Show Details" button handles navigation to details page
+  // Learn More button - opens GitHub homepage
+  learnMoreButton.addEventListener('click', () => {
+    chrome.tabs.create({ url: 'https://github.com/yourusername/yourrepository' });
+  });// The "Show Details" button handles navigation to details page
   function showLoadingState() {
     loadingElement.classList.remove('hidden');
     noProductElement.classList.add('hidden');
