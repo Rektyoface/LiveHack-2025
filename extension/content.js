@@ -683,10 +683,10 @@
     hasRequestedData = true;
     console.log("EcoShop: Extraction successful, setting flags but keeping observer active");
     console.log("EcoShop: Sending to service worker for fresh database data", productInfo);
-    
-    // Show loading toast while fetching fresh data from database
+      // Show loading toast while fetching data from database
     showToast("EcoShop: Fetching fresh data from database...", 3000);
     
+    // Actually fetch the data immediately when toast is shown
     chrome.runtime.sendMessage({ 
       action: "checkSustainability", 
       productInfo: productInfo 
@@ -696,7 +696,8 @@
         showToast("EcoShop: Extension error - please try refreshing the page", 5000);
         return;
       }
-        if (response && response.success) {
+      
+      if (response && response.success) {
         console.log("EcoShop: Fresh data received from database, displaying badge");
         showToast("EcoShop: Fresh data loaded from database!", 2000);
         displaySustainabilityBadge(response.data);
@@ -749,27 +750,65 @@
     const preferences = await getUserPreferences();
     const darkMode = preferences.darkMode;
     const seniorMode = preferences.seniorMode;
+      // Calculate weighted score using the same algorithm as popup and badge
+    const breakdown = sustainabilityData.sustainability_breakdown || sustainabilityData.breakdown;
+    let displayScore = undefined;
     
-    // ALWAYS use the fresh backend score directly - no frontend calculation
-    let displayScore = sustainabilityData.score;
-    
-    console.log("content.js: Raw backend score from sustainabilityData:", sustainabilityData.score);
-    console.log("content.js: Using fresh backend score directly:", displayScore);
-    console.log("content.js: Backend score type:", typeof displayScore);
-    
-    // Validate the backend score
-    if (typeof displayScore !== 'number' || isNaN(displayScore)) {
-      console.warn("content.js: Backend score invalid, not showing badge:", displayScore);
-      console.warn("content.js: sustainabilityData keys:", Object.keys(sustainabilityData));
-      return; // Don't show badge if no valid score from backend
+    if (breakdown) {
+      // Get user weights from settings
+      const result = await new Promise(resolve => {
+        chrome.storage.sync.get(['settings'], (result) => {
+          resolve(result);
+        });
+      });
+      
+      const settingsData = result.settings || {};
+      const fieldWeightMap = {
+        production_and_brand: settingsData.production_and_brand || 5,
+        circularity_and_end_of_life: settingsData.circularity_and_end_of_life || 5,
+        material_composition: settingsData.material_composition || 5
+      };
+      const fieldOrder = [
+        'production_and_brand',
+        'circularity_and_end_of_life',
+        'material_composition'
+      ];
+      
+      let weightedSum = 0;
+      let totalWeight = 0;
+      
+      // Calculate total weight first
+      fieldOrder.forEach(key => {
+        totalWeight += fieldWeightMap[key] || 5;
+      });
+      
+      // Calculate weighted sum
+      fieldOrder.forEach(key => {
+        const metricData = breakdown[key] || {};
+        let fieldScore = typeof metricData.score === 'number' ? metricData.score : undefined;
+        let summaryScore = (typeof fieldScore === 'number') ? fieldScore * fieldWeightMap[key] / totalWeight : 0;
+        weightedSum += summaryScore;
+      });
+      
+      displayScore = weightedSum > 0 ? Math.round(weightedSum * 10) : undefined;
+      
+      console.log("content.js: Calculated weighted score:", displayScore);
+      console.log("content.js: Weighted sum:", weightedSum);
+      console.log("content.js: Field weights:", fieldWeightMap);
+    } else {
+      console.warn("content.js: No breakdown data available for score calculation");
+      return; // Don't show badge if no breakdown data
     }
     
-    // Round the backend score for display
-    displayScore = Math.round(displayScore);
-    console.log("content.js: Final display score from backend:", displayScore);
+    // Validate the calculated score
+    if (typeof displayScore !== 'number' || isNaN(displayScore)) {
+      console.warn("content.js: Calculated score invalid, not showing badge:", displayScore);
+      return; // Don't show badge if no valid calculated score
+    }
     
-    // Always update the browser action badge with fresh backend score
-    chrome.runtime.sendMessage({ action: "setBadgeScoreFromContent", displayScore });
+    console.log("content.js: Final calculated display score:", displayScore);
+      // Always update the browser action badge with calculated weighted score
+    chrome.runtime.sendMessage({ action: "setBadgeScore", score: displayScore });
     // If showBadge is disabled, don't show the floating badge but still set browser action badge
     if (!preferences.showBadge) {
       console.log("EcoShop: Floating badge disabled by user preference, but browser action badge updated with fresh score");

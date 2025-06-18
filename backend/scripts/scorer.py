@@ -65,4 +65,4 @@ def calculate_weighted_score(sustainability_breakdown: dict, user_weights: dict 
     if count == 0:
         return 50
     normalized_score = 50 + 50 * (total_score / count)
-    return max(0, min(100, int(normalized_score)))
+    return max(0, min(100, round(normalized_score)))  # Use round() instead of int() to properly round values)

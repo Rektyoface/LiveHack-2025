@@ -5,7 +5,7 @@ console.log("EcoShop Service Worker starting up...");
 console.log("EcoShop Service Worker ACTIVE: [main service_worker.js] - v2025-06-17");
 
 // Note: No caching - always fetch fresh data from database
-console.log("EcoShop Service Worker: Always fetching fresh data from database");
+console.log("EcoShop Service Worker: Always fetching data from database");
 
 // Store product data history for reference
 let scrapedProductsHistory = [];
@@ -82,11 +82,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       })();
       
-      return true; // Required for async response
-    } else if (message.action === "openPopup") {
+      return true; // Required for async response    } else if (message.action === "openPopup") {
       if (sender.tab && sender.tab.id) {
         chrome.action.setPopup({ tabId: sender.tab.id, popup: "popup/popup.html" });
-        chrome.action.setBadgeText({ text: "OPEN", tabId: sender.tab.id });
+        // Remove the badge number - always set empty text
+        chrome.action.setBadgeText({ text: "", tabId: sender.tab.id });
         chrome.action.setBadgeBackgroundColor({ color: [41, 121, 255, 255], tabId: sender.tab.id });
         let flashCount = 0;
         const flashInterval = setInterval(() => {
@@ -155,10 +155,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         updateBadgeForTab(message.tabId, cachedData);
       }
       sendResponse && sendResponse({ success: true });
-      return true;
-    } else if (message.action === "setBadgeScore" && typeof message.score === 'number') {
+      return true;    } else if (message.action === "setBadgeScore" && typeof message.score === 'number') {
       if (sender && sender.tab && sender.tab.id) {
-        chrome.action.setBadgeText({ text: String(message.score), tabId: sender.tab.id });
+        // Remove the badge number - always set empty text
+        chrome.action.setBadgeText({ text: '', tabId: sender.tab.id });
         let color = '#FFC107';
         if (message.score >= 70) color = '#4CAF50';
         else if (message.score < 40) color = '#F44336';
@@ -363,7 +363,7 @@ async function handleSustainabilityCheck(productInfo, sendResponse, sender) {
       scrapedProductsHistory.unshift(productWithTimestamp);
       if (scrapedProductsHistory.length > 100) scrapedProductsHistory.pop();
     }    // ALWAYS fetch fresh data from database - no caching
-    console.log("Service worker: Always fetching fresh data from database...");
+    console.log("Service worker: Always fetching data from database...");
     const startTime = Date.now();
     const cacheKey = productInfo.url || (productInfo.brand || productInfo.name)?.toLowerCase();
 
@@ -726,16 +726,15 @@ async function updateBadgeForTab(tabId, backendDataOrScore, displayScoreFromCont
         
         score = weightedSum > 0 ? Math.round(weightedSum * 10) : undefined;
       }
-    }
-  }
+    }  }
+  // Remove the badge number - always set empty text
+  chrome.action.setBadgeText({ text: '', tabId });
   if (typeof score === 'number' && !isNaN(score)) {
-    chrome.action.setBadgeText({ text: String(score), tabId });
     let color = '#FFC107';
     if (score >= 70) color = '#4CAF50';
     else if (score < 40) color = '#F44336';
     chrome.action.setBadgeBackgroundColor({ color, tabId });
   } else {
-    chrome.action.setBadgeText({ text: '', tabId });
     chrome.action.setBadgeBackgroundColor({ color: '#888', tabId });
   }
 }
@@ -803,9 +802,9 @@ function formatAsPlainText(info) {
 
 // Listen for direct badge update from content.js
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "setBadgeScoreFromContent" && typeof message.displayScore === 'number') {
+  if (message.action === "setBadgeScore" && typeof message.score === 'number') {
     if (sender && sender.tab && sender.tab.id) {
-      updateBadgeForTab(sender.tab.id, undefined, message.displayScore);
+      updateBadgeForTab(sender.tab.id, undefined, message.score);
     }
     sendResponse && sendResponse({ success: true });
     return true;

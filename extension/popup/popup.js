@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // ALWAYS fetch fresh data from database - no caching
-    console.log("popup.js: Always fetching fresh data from database for URL:", currentTab.url);
+    console.log("popup.js: Always fetching data from database for URL:", currentTab.url);
     
     chrome.tabs.sendMessage(currentTab.id, { action: "getProductInfo" }, function(response) {
       if (chrome.runtime.lastError || !response) {
@@ -124,40 +124,81 @@ document.addEventListener('DOMContentLoaded', function() {
     const data = response.data;
     console.log("popup.js: Fresh data object from database:", data);
     console.log("popup.js: Fresh backend score value:", data.score);
-    console.log("popup.js: Fresh backend score type:", typeof data.score);
-
-    // Show product info section
+    console.log("popup.js: Fresh backend score type:", typeof data.score);    // Show product info section
     productInfoElement.classList.remove('hidden');
     
-    // CRITICAL: Use the fresh backend score directly from database
-    const backendScore = data.score;
-    let displayScore;
-      // Only show score if we have a valid number from fresh database data
-    if (typeof backendScore === 'number' && !isNaN(backendScore)) {
-      displayScore = Math.round(backendScore);
-      console.log("popup.js: Using fresh database score:", displayScore);
+    // Calculate weighted score using the same algorithm as the badge
+    const breakdown = data.sustainability_breakdown || data.breakdown;
+    let displayScore = undefined;
+    
+    if (breakdown) {
+      // Get user weights from settings (async operation)
+      chrome.storage.sync.get(['settings'], (result) => {
+        const settingsData = result.settings || {};
+        const fieldWeightMap = {
+          production_and_brand: settingsData.production_and_brand || 5,
+          circularity_and_end_of_life: settingsData.circularity_and_end_of_life || 5,
+          material_composition: settingsData.material_composition || 5
+        };
+        const fieldOrder = [
+          'production_and_brand',
+          'circularity_and_end_of_life',
+          'material_composition'
+        ];
+        
+        let weightedSum = 0;
+        let totalWeight = 0;
+        
+        // Calculate total weight first
+        fieldOrder.forEach(key => {
+          totalWeight += fieldWeightMap[key] || 5;
+        });
+        
+        // Calculate weighted sum
+        fieldOrder.forEach(key => {
+          const metricData = breakdown[key] || {};
+          let fieldScore = typeof metricData.score === 'number' ? metricData.score : undefined;
+          let summaryScore = (typeof fieldScore === 'number') ? fieldScore * fieldWeightMap[key] / totalWeight : 0;
+          weightedSum += summaryScore;        });
+        
+        // Handle case where all fields are 0 (should display as 0, not undefined)
+        displayScore = weightedSum >= 0 ? Math.round(weightedSum * 10) : undefined;
+        
+        console.log("popup.js: Calculated weighted score:", displayScore);
+        console.log("popup.js: Weighted sum:", weightedSum);
+        console.log("popup.js: Field weights:", fieldWeightMap);
+        
+        // Update the display with calculated score
+        updateScoreDisplay(displayScore);
+      });
     } else {
-      console.warn("popup.js: Fresh database score not valid:", backendScore);
-      // Don't show a default - show that we need fresh data from database
-      showNoProductMessage("Fresh score not available from database. Please try again.");
+      console.warn("popup.js: No breakdown data available for score calculation");
+      showNoProductMessage("Score calculation failed - no breakdown data available");
       return;
     }
+    
+    function updateScoreDisplay(calculatedScore) {
+      // Allow 0 as a valid score (when all fields are 0)
+      if (typeof calculatedScore !== 'number' || isNaN(calculatedScore) || calculatedScore < 0) {
+        console.warn("popup.js: Calculated score not valid:", calculatedScore);
+        showNoProductMessage("Score calculation failed. Please try again.");
+        return;
+      }
+      
+      // Update the main score display
+      const scoreColor = getScoreColor(calculatedScore);
+      scoreValueElement.style.color = '#FFF';
+      scoreValueElement.parentElement.style.backgroundColor = scoreColor;
+      brandNameElement.textContent = data.brand_name || data.brand || "Unknown Brand";
+      scoreValueElement.textContent = calculatedScore;
 
-    // Update the main score display with fresh database score only
-    const scoreColor = getScoreColor(displayScore);
-    scoreValueElement.style.color = '#FFF';
-    scoreValueElement.parentElement.style.backgroundColor = scoreColor;
-    brandNameElement.textContent = data.brand_name || data.brand || "Unknown Brand";
-    scoreValueElement.textContent = displayScore;
+      console.log("popup.js: Updated main score display with calculated score:", calculatedScore);
 
-    console.log("popup.js: Updated main score display with fresh database score:", displayScore);
-
-    // Update the browser action badge to match the popup score
-    chrome.runtime.sendMessage({ action: "setBadgeScore", score: displayScore });
-
-    // Render the breakdown details (but DON'T let this override the main score)
+      // Update the browser action badge to match the popup score
+      chrome.runtime.sendMessage({ action: "setBadgeScore", score: calculatedScore });
+    }    // Render the breakdown details (but DON'T let this override the main score)
     sustainabilityMetricsContainer.innerHTML = '';
-    const breakdown = data.sustainability_breakdown || data.breakdown;
+    // Use the same breakdown variable from above
     let detailsData = [];
     const fieldOrder = [
       { key: 'production_and_brand', label: 'Production And Brand' },
@@ -330,9 +371,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Start progressive loading messages
-    updateLoadingMessage("Fetching fresh data from database...");
+    updateLoadingMessage("Fetching data from database...");
     
-    console.log("popup.js: Showing loading state - fetching fresh data from database");
+    console.log("popup.js: Showing loading state - fetching data from database");
   }
   
   function updateLoadingMessage(message) {
@@ -343,7 +384,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function showProgressiveLoading() {
     let step = 0;
     const messages = [
-      "Fetching fresh data from database...",
+      "Fetching data from database...",
       "Analyzing sustainability metrics...",
       "Calculating scores and recommendations...",
       "Preparing detailed breakdown..."
